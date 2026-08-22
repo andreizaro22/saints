@@ -193,6 +193,14 @@
                 await saveData();
                 renderOrders();
             },
+            async updateOrderDoc(docId, updatedData) {
+                let o = orders.find(item => item.id == docId);
+                if (o) {
+                    Object.assign(o, updatedData);
+                    await saveData();
+                    renderOrders();
+                }
+            },
             async deleteOrderDoc(docId) {
                 orders = orders.filter(item => item.id != docId);
                 await saveData();
@@ -309,7 +317,7 @@
                     <i class="fa-solid fa-trophy mr-1 text-amber-500"></i> Clasament
                 </button>
                 <button onclick="switchTab('orders')" id="btn-tab-orders" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
-                    <i class="fa-solid fa-boxes-stacked mr-1 text-blue-400"></i> Comenzi
+                    <i class="fa-solid fa-truck-ramp-box mr-1 text-blue-400"></i> Comenzi Curier
                 </button>
                 <button onclick="switchTab('weapons')" id="btn-tab-weapons" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
                     <i class="fa-solid fa-hammer mr-1 text-red-400"></i> Arme
@@ -405,27 +413,20 @@
             </div>
         </div>
 
-        <!-- ORDERS TAB -->
+        <!-- ORDERS TAB (STIL CURIERAT) -->
         <div id="section-orders" class="mt-6 hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider">Comenzi Active</h3>
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider"><i class="fa-solid fa-truck-fast text-amber-500 mr-2"></i>Sistem Urmărire Comenzi (Stil Curierat)</h3>
+                    <p class="text-xs text-gray-500">Urmărește statusul livrării, responsabilul și marchează produsele neaduse/lipsă</p>
+                </div>
                 <button onclick="openAdvancedOrderModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg">
-                    <i class="fa-solid fa-cart-plus mr-1"></i> Adaugă Comandă Nouă
+                    <i class="fa-solid fa-cart-plus mr-1"></i> Creează Comandă Nouă
                 </button>
             </div>
-            <div class="overflow-x-auto rounded-lg border border-gray-800 shadow-xl bg-[#121418]">
-                <table class="w-full text-left text-sm text-gray-300">
-                    <thead class="bg-[#121418] text-xs uppercase text-gray-400 border-b border-gray-800">
-                        <tr>
-                            <th class="py-3 px-4">Client</th>
-                            <th class="py-3 px-4">Produse Comandate</th>
-                            <th class="py-3 px-4">Detalii Extra</th>
-                            <th class="py-3 px-4 text-right">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="orders-table-body" class="divide-y divide-gray-800/60 bg-black/30"></tbody>
-                </table>
-            </div>
+
+            <!-- CONTAINER LISTĂ COMENZI SUB FORMĂ DE CARDURI DE CURIERAT -->
+            <div id="orders-cards-container" class="space-y-4"></div>
         </div>
 
         <!-- WEAPONS TAB -->
@@ -624,7 +625,7 @@
         </div>
     </div>
 
-    <!-- MODAL AVANSAT MULTI-PRODUCT COMENZI -->
+    <!-- MODAL AVANSAT MULTI-PRODUCT COMENZI (PĂSTRAT 100% INTACT) -->
     <div id="advanced-order-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
         <div class="bg-[#17191d] border-2 border-[#52473f] rounded-xl p-6 max-w-lg w-full shadow-[0_0_35px_rgba(0,0,0,0.9)] my-8">
             <h3 class="text-lg font-bold text-amber-500 mb-4 uppercase tracking-wider border-b border-gray-700 pb-2"><i class="fa-solid fa-cart-shopping mr-2"></i>Creare Comandă Nouă</h3>
@@ -776,7 +777,6 @@
             });
         }
 
-        // FUNCTIE EXPORT RAPORT CA IMAGINE PNG
         function exportMembersPNG() {
             const element = document.getElementById('members-table-wrapper');
             
@@ -805,7 +805,6 @@
             });
         }
         
-        // SISTEM CLASAMENT COMPLEX
         function renderLeaderboard() { 
             const sorted = [...members].sort((a, b) => getTotalActions(b) - getTotalActions(a)); 
             const totalActionsGang = members.reduce((sum, m) => sum + getTotalActions(m), 0);
@@ -844,7 +843,6 @@
 
                 let podiumHTML = '<div class="flex items-end justify-center gap-3 md:gap-6 my-6 w-full max-w-2xl mx-auto px-2">';
 
-                // LOCUL 2 (Argint)
                 if (top2) {
                     podiumHTML += `
                     <div class="flex flex-col items-center flex-1 order-1">
@@ -857,7 +855,6 @@
                     </div>`;
                 } else { podiumHTML += `<div class="flex-1 order-1"></div>`; }
 
-                // LOCUL 1 (Aur)
                 if (top1) {
                     podiumHTML += `
                     <div class="flex flex-col items-center flex-1 order-2">
@@ -871,7 +868,6 @@
                     </div>`;
                 }
 
-                // LOCUL 3 (Bronz)
                 if (top3) {
                     podiumHTML += `
                     <div class="flex flex-col items-center flex-1 order-3">
@@ -948,15 +944,81 @@
         }
         function closeModal() { document.getElementById('custom-modal').classList.add('hidden'); }
 
-        // SISTEM COMENZI MULTI-PRODUCT
-        function renderOrders() {
-            const tbody = document.getElementById('orders-table-body');
-            tbody.innerHTML = '';
-            orders.forEach(o => {
-                let itemsListHTML = '';
-                const itemsToRender = o.items || [{ type: o.type, item: o.item, customItem: o.customItem, quantity: o.quantity, ammo: o.ammo }];
+        // ==========================================
+        // SISTEM CURIERAT & TRACKING COMENZI
+        // ==========================================
 
-                itemsToRender.forEach(it => {
+        function getStatusBadge(status) {
+            switch(status) {
+                case 'plasata':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-hourglass-start animate-spin text-[10px]"></i> ⏳ Plasată (În Așteptare)</span>`;
+                case 'preluata':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-box-archive text-[10px]"></i> 📦 Preluată / În Pregătire</span>`;
+                case 'in_curs':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-truck-fast text-[10px]"></i> 🚚 În Curs de Livrare</span>`;
+                case 'livrata':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-[10px]"></i> ✅ Livrată Complet</span>`;
+                case 'partial':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation text-[10px]"></i> ⚠️ Livrată Parțial</span>`;
+                case 'anulata':
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/40 inline-flex items-center gap-1.5"><i class="fa-solid fa-circle-xmark text-[10px]"></i> ❌ Comandă Anulată</span>`;
+                default:
+                    return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/40">⏳ Plasată</span>`;
+            }
+        }
+
+        function renderOrders() {
+            const container = document.getElementById('orders-cards-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (orders.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center bg-[#121418] rounded-lg border border-gray-800 text-gray-500 italic">
+                        <i class="fa-solid fa-box-open text-4xl mb-3 text-gray-700 block"></i>
+                        Nicio comandă înregistrată în sistem. Apasă pe "Creează Comandă Nouă".
+                    </div>
+                `;
+                return;
+            }
+
+            orders.forEach(o => {
+                const status = o.status || 'plasata';
+                const assignedTo = o.assignedTo || '';
+                const items = o.items || [{ type: o.type, item: o.item, customItem: o.customItem, quantity: o.quantity, ammo: o.ammo, status: 'adus' }];
+
+                const hasUndeliveredItems = items.some(it => it.status === 'neadus');
+
+                // Culori stepper vizual stil curierat
+                let step1 = 'text-amber-500 border-amber-500 bg-amber-950/50';
+                let step2 = 'text-gray-600 border-gray-700 bg-black/40';
+                let step3 = 'text-gray-600 border-gray-700 bg-black/40';
+                let step4 = 'text-gray-600 border-gray-700 bg-black/40';
+
+                let line1 = 'bg-gray-800';
+                let line2 = 'bg-gray-800';
+                let line3 = 'bg-gray-800';
+
+                if (['preluata', 'in_curs', 'livrata', 'partial'].includes(status)) {
+                    step2 = 'text-blue-400 border-blue-500 bg-blue-950/50';
+                    line1 = 'bg-blue-600';
+                }
+                if (['in_curs', 'livrata', 'partial'].includes(status)) {
+                    step3 = 'text-indigo-400 border-indigo-500 bg-indigo-950/50';
+                    line2 = 'bg-indigo-600';
+                }
+                if (['livrata', 'partial'].includes(status)) {
+                    step4 = status === 'partial' 
+                        ? 'text-orange-400 border-orange-500 bg-orange-950/50' 
+                        : 'text-green-400 border-green-500 bg-green-950/50';
+                    line3 = status === 'partial' ? 'bg-orange-600' : 'bg-green-600';
+                }
+                if (status === 'anulata') {
+                    step1 = 'text-red-500 border-red-500 bg-red-950/50';
+                }
+
+                // Generare produse cu buton de semnalare Neadus
+                let itemsHTML = items.map((it, idx) => {
                     let badgeClass = "bg-gray-800 text-gray-300";
                     let icon = "fa-box";
                     if (it.type === 'Consumabile') { badgeClass = "bg-blue-900/50 text-blue-400 border border-blue-800"; icon = "fa-medkit"; }
@@ -964,29 +1026,205 @@
                     else if (it.type === 'Arme') { badgeClass = "bg-red-900/50 text-red-400 border border-red-800"; icon = "fa-gun"; }
 
                     let nameStr = (it.item === 'Altele') ? it.customItem : it.item;
-                    let ammoStr = (it.type === 'Arme' && parseInt(it.ammo) > 0) ? `<span class="text-red-400 text-[11px] ml-2">(${it.ammo} gloanțe)</span>` : '';
+                    let ammoStr = (it.type === 'Arme' && parseInt(it.ammo) > 0) ? `<span class="text-red-400 text-[11px] ml-1">(${it.ammo} gloanțe)</span>` : '';
+                    
+                    const itemStatus = it.status || 'adus';
+                    let toggleBtn = '';
+                    if (itemStatus === 'adus') {
+                        toggleBtn = `
+                            <button onclick="toggleOrderItemStatus('${o.id}', ${idx})" 
+                                    class="px-2 py-1 rounded text-[11px] font-bold bg-green-950/60 border border-green-700/60 text-green-400 hover:bg-red-950/80 hover:text-red-300 transition flex items-center gap-1 shadow-sm"
+                                    title="Apasă pentru a semnala ca Neadus/Lipsă">
+                                <i class="fa-solid fa-check"></i>
+                                <span>Adus / Ok</span>
+                            </button>`;
+                    } else {
+                        toggleBtn = `
+                            <button onclick="toggleOrderItemStatus('${o.id}', ${idx})" 
+                                    class="px-2 py-1 rounded text-[11px] font-bold bg-red-950/80 border border-red-600 text-red-400 hover:bg-green-950/80 hover:text-green-300 transition flex items-center gap-1 shadow-sm animate-pulse"
+                                    title="Apasă pentru a schimba în Adus">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>NEADUS / Lipsă</span>
+                            </button>`;
+                    }
 
-                    itemsListHTML += `
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass}"><i class="fa-solid ${icon} mr-1"></i>${it.type}</span>
-                            <span class="font-bold text-white">${it.quantity}x ${nameStr}</span>
-                            ${ammoStr}
+                    return `
+                        <div class="flex flex-wrap items-center justify-between gap-2 bg-black/40 p-2 rounded border ${itemStatus === 'neadus' ? 'border-red-900/60 bg-red-950/20' : 'border-gray-800/80'}">
+                            <div class="flex items-center gap-2">
+                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass}"><i class="fa-solid ${icon} mr-1"></i>${it.type}</span>
+                                <span class="font-bold text-white text-sm">${it.quantity}x ${nameStr}</span>
+                                ${ammoStr}
+                            </div>
+                            <div>
+                                ${toggleBtn}
+                            </div>
                         </div>
                     `;
-                });
+                }).join('');
 
-                tbody.innerHTML += `
-                <tr class="hover:bg-white/5 border-t border-gray-800/50">
-                    <td class="py-3 px-4 font-bold">${o.name} <div class="text-[10px] text-gray-500">CNP: ${o.cnp} | Tel: ${o.phone}</div></td>
-                    <td class="py-3 px-4">${itemsListHTML}</td>
-                    <td class="py-3 px-4 text-xs text-gray-400 italic">${o.details || '-'}</td>
-                    <td class="py-3 px-4 text-right">
-                        <button onclick="window.dbRef.deleteOrderDoc('${o.id}')" class="px-3 py-1.5 bg-green-900/40 border border-green-800/60 hover:bg-green-800 text-green-400 font-bold rounded text-xs transition shadow"><i class="fa-solid fa-check mr-1"></i> Finalizat</button>
-                    </td>
-                </tr>
+                // Informații despre membrul care se ocupă de comandă
+                let assignedHTML = '';
+                if (assignedTo) {
+                    assignedHTML = `<span class="text-xs bg-amber-950/50 text-amber-300 border border-amber-800/60 px-2.5 py-1 rounded-md font-semibold flex items-center gap-1.5"><i class="fa-solid fa-user-gear text-amber-500"></i> Se ocupă: ${assignedTo}</span>`;
+                } else {
+                    assignedHTML = `<button onclick="assignOrderToMe('${o.id}')" class="text-xs bg-blue-950/80 hover:bg-blue-900 border border-blue-700 text-blue-300 px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1"><i class="fa-solid fa-hand text-blue-400"></i> Prelucrează Comanda</button>`;
+                }
+
+                // Butoane schimare status
+                let statusActionBtns = '';
+                if (status === 'plasata') {
+                    statusActionBtns += `<button onclick="changeOrderStatus('${o.id}', 'preluata')" class="px-3 py-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold rounded-lg transition"><i class="fa-solid fa-box-archive mr-1"></i> Preluat</button>`;
+                }
+                if (['plasata', 'preluata'].includes(status)) {
+                    statusActionBtns += `<button onclick="changeOrderStatus('${o.id}', 'in_curs')" class="px-3 py-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 text-xs font-bold rounded-lg transition"><i class="fa-solid fa-truck-fast mr-1"></i> În Livrare</button>`;
+                }
+                if (['plasata', 'preluata', 'in_curs'].includes(status)) {
+                    statusActionBtns += `<button onclick="changeOrderStatus('${o.id}', 'livrata')" class="px-3 py-1.5 bg-green-950/80 hover:bg-green-900 border border-green-800 text-green-300 text-xs font-bold rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Livrată / Finalizat</button>`;
+                }
+                if (status !== 'anulata' && status !== 'livrata' && status !== 'partial') {
+                    statusActionBtns += `<button onclick="changeOrderStatus('${o.id}', 'anulata')" class="px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-bold rounded-lg transition"><i class="fa-solid fa-ban mr-1"></i> Anulează</button>`;
+                }
+
+                container.innerHTML += `
+                    <div class="bg-[#121418] border border-gray-800 rounded-xl p-4 md:p-5 shadow-xl transition-all hover:border-gray-700 relative">
+                        <!-- HEADER CARD -->
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-gray-800">
+                            <div>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h4 class="text-base font-black text-white uppercase tracking-wider">${o.name}</h4>
+                                    <span class="text-xs text-gray-400 font-mono bg-black/40 px-2 py-0.5 rounded border border-gray-800">CNP: ${o.cnp}</span>
+                                    <span class="text-xs text-amber-500 font-mono bg-black/40 px-2 py-0.5 rounded border border-gray-800"><i class="fa-solid fa-phone text-[10px] mr-1"></i>${o.phone}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                ${assignedHTML}
+                                ${getStatusBadge(status)}
+                            </div>
+                        </div>
+
+                        <!-- INDICATOR VIZUAL STEPPER CURIER -->
+                        <div class="py-4 my-2 border-b border-gray-800/60">
+                            <div class="flex items-center justify-between max-w-xl mx-auto px-2">
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full border-2 ${step1} flex items-center justify-center font-bold text-xs shadow-md">
+                                        <i class="fa-solid fa-file-invoice"></i>
+                                    </div>
+                                    <span class="text-[10px] font-bold mt-1 text-gray-400">1. Plasată</span>
+                                </div>
+                                <div class="flex-1 h-1 mx-1 rounded ${line1}"></div>
+
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full border-2 ${step2} flex items-center justify-center font-bold text-xs shadow-md">
+                                        <i class="fa-solid fa-box-archive"></i>
+                                    </div>
+                                    <span class="text-[10px] font-bold mt-1 text-gray-400">2. Preluată</span>
+                                </div>
+                                <div class="flex-1 h-1 mx-1 rounded ${line2}"></div>
+
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full border-2 ${step3} flex items-center justify-center font-bold text-xs shadow-md">
+                                        <i class="fa-solid fa-truck"></i>
+                                    </div>
+                                    <span class="text-[10px] font-bold mt-1 text-gray-400">3. Livrare</span>
+                                </div>
+                                <div class="flex-1 h-1 mx-1 rounded ${line3}"></div>
+
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full border-2 ${step4} flex items-center justify-center font-bold text-xs shadow-md">
+                                        <i class="fa-solid fa-flag-checkered"></i>
+                                    </div>
+                                    <span class="text-[10px] font-bold mt-1 text-gray-400">${status === 'partial' ? '4. Parțial' : '4. Finalizată'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LISTĂ PRODUSE -->
+                        <div class="mb-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs font-bold text-gray-400 uppercase tracking-wider"><i class="fa-solid fa-boxes-stacked text-amber-500 mr-1.5"></i>Produse Comandate (Selectează statusul fiecărui produs):</span>
+                                ${hasUndeliveredItems ? '<span class="text-xs text-red-400 font-bold bg-red-950/40 px-2 py-0.5 rounded border border-red-900/50"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Produse semnalate ca neaduse</span>' : ''}
+                            </div>
+                            <div class="space-y-1.5">
+                                ${itemsHTML}
+                            </div>
+                        </div>
+
+                        <!-- DETALII EXTRA -->
+                        ${o.details ? `
+                            <div class="bg-black/30 p-2 rounded border border-gray-800/50 mb-3 text-xs text-gray-400">
+                                <span class="font-bold text-amber-500/90 mr-1"><i class="fa-solid fa-circle-info mr-1"></i>Detalii Extra:</span> ${o.details}
+                            </div>
+                        ` : ''}
+
+                        <!-- BUTOANE ACȚIUNI -->
+                        <div class="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-gray-800/80">
+                            <div class="flex flex-wrap gap-1.5">
+                                ${statusActionBtns}
+                            </div>
+                            <button onclick="confirmDeleteOrder('${o.id}')" class="px-3 py-1.5 bg-gray-900 hover:bg-red-950 border border-gray-700 hover:border-red-800 text-gray-400 hover:text-red-400 text-xs font-bold rounded-lg transition" title="Șterge definitiv comanda">
+                                <i class="fa-solid fa-trash mr-1"></i> Șterge
+                            </button>
+                        </div>
+                    </div>
                 `;
             });
         }
+
+        async function assignOrderToMe(orderId) {
+            const u = window.appState.getCurrentUser();
+            const name = u && u.name ? u.name : 'Membru Gang';
+            await window.dbRef.updateOrderDoc(orderId, { assignedTo: name, status: 'preluata' });
+        }
+
+        async function changeOrderStatus(orderId, newStatus) {
+            const o = orders.find(item => item.id == orderId);
+            if (!o) return;
+
+            let finalStatus = newStatus;
+
+            // Dacă se dorește livrarea dar există produse neaduse, devine automat livrată parțial
+            if (newStatus === 'livrata') {
+                const items = o.items || [];
+                const hasUndelivered = items.some(it => it.status === 'neadus');
+                if (hasUndelivered) {
+                    finalStatus = 'partial';
+                }
+            }
+
+            await window.dbRef.updateOrderDoc(orderId, { status: finalStatus });
+        }
+
+        async function toggleOrderItemStatus(orderId, itemIndex) {
+            const o = orders.find(item => item.id == orderId);
+            if (!o || !o.items || !o.items[itemIndex]) return;
+
+            const currentItemStatus = o.items[itemIndex].status || 'adus';
+            o.items[itemIndex].status = (currentItemStatus === 'adus') ? 'neadus' : 'adus';
+
+            let currentStatus = o.status || 'plasata';
+            const hasUndelivered = o.items.some(it => it.status === 'neadus');
+
+            if (currentStatus === 'livrata' && hasUndelivered) {
+                currentStatus = 'partial';
+            } else if (currentStatus === 'partial' && !hasUndelivered) {
+                currentStatus = 'livrata';
+            }
+
+            await window.dbRef.updateOrderDoc(orderId, { items: o.items, status: currentStatus });
+        }
+
+        function confirmDeleteOrder(orderId) {
+            showModal({
+                title: 'Ștergere Comandă',
+                message: 'Ești sigur că vrei să ștergi această comandă?',
+                type: 'confirm',
+                onConfirm: () => window.dbRef.deleteOrderDoc(orderId)
+            });
+        }
+
+        // ==========================================
+        // CREARE COMANDĂ NOUĂ (SELECȚIE NEATINSĂ)
+        // ==========================================
 
         function openAdvancedOrderModal() {
             currentOrderDraftItems = [];
@@ -1049,7 +1287,8 @@
                 item: item,
                 customItem: customItem,
                 quantity: quantity,
-                ammo: ammo
+                ammo: ammo,
+                status: 'adus'
             });
 
             document.getElementById('ord-quantity').value = 1;
@@ -1094,19 +1333,28 @@
                 return;
             }
 
+            const itemsWithStatus = currentOrderDraftItems.map(it => ({
+                ...it,
+                status: 'adus'
+            }));
+
             const v = {
                 name: document.getElementById('ord-name').value.trim(),
                 cnp: document.getElementById('ord-cnp').value.trim(),
                 phone: document.getElementById('ord-phone').value.trim(),
-                items: currentOrderDraftItems,
-                details: document.getElementById('ord-details').value.trim()
+                items: itemsWithStatus,
+                details: document.getElementById('ord-details').value.trim(),
+                status: 'plasata',
+                assignedTo: ''
             };
 
             await window.dbRef.addOrder(v);
             closeAdvancedOrderModal();
         }
 
-        // SISTEM CALCULATOR ARME 
+        // ==========================================
+        // CALCULATOARE ARME ȘI DROGURI
+        // ==========================================
         let cart = [];
         function loadCategories() { const catSelect = document.getElementById('craft-category'); const categories = [...new Set(craftDB.map(w => w.cat))]; catSelect.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join(''); loadWeapons(); }
         function loadWeapons() { const cat = document.getElementById('craft-category').value; const wSelect = document.getElementById('craft-weapon'); const filtered = craftDB.filter(w => w.cat === cat); wSelect.innerHTML = filtered.map(w => `<option value="${w.name}">${w.name}</option>`).join(''); loadAttachments(); }
@@ -1116,7 +1364,6 @@
         function renderCart() { const cartDiv = document.getElementById('cart-items'); if (cart.length === 0) { cartDiv.innerHTML = 'Nicio armă adăugată. Selectează din stânga.'; updateTotals(); return; } cartDiv.innerHTML = cart.map((item, index) => { const attLabel = item.atts.length > 0 ? `<div class="text-[10px] text-amber-500/80 mt-1 flex flex-wrap gap-1">${item.atts.map(a=>`<span class="bg-black/40 px-1 rounded border border-amber-900/30">+ ${a}</span>`).join('')}</div>` : ''; return `<div class="flex justify-between items-center bg-[#171a21] p-2 rounded border border-gray-800/80 shadow-sm"><div><span class="font-bold text-gray-200">${item.qty}x ${item.weapon.name}</span>${attLabel}</div><button onclick="cart.splice(${index}, 1); renderCart()" class="text-red-400 hover:text-red-300 ml-2"><i class="fa-solid fa-xmark"></i></button></div>`; }).join(''); updateTotals(); }
         function updateTotals() { let totals = { teava: 0, cadru: 0, mecanism: 0, fixare: 0, cauciuc: 0, placaj: 0, arc: 0, bec: 0, lupa: 0, otel: 0, bani: 0 }; cart.forEach(item => { for (let k in item.weapon.base) totals[k] = (totals[k] || 0) + (item.weapon.base[k] * item.qty); item.atts.forEach(attName => { const attObj = item.weapon.att[attName]; for (let k in attObj) totals[k] = (totals[k] || 0) + (attObj[k] * item.qty); }); }); if (cart.length > 0) totals.bani += 40000; const totalOtel = (totals.teava||0) + (totals.cadru||0) + (totals.mecanism||0) + (totals.otel||0) + ((totals.fixare||0) * 2); const totalFier = totalOtel * 5; const grid = document.getElementById('mats-grid'); grid.innerHTML = ''; const config = [ { key: 'teava', label: 'Țevi', icon: 'fa-pipe', color: 'text-gray-300' }, { key: 'cadru', label: 'Cadre', icon: 'fa-square', color: 'text-gray-300' }, { key: 'mecanism', label: 'Mecanisme', icon: 'fa-gear', color: 'text-gray-300' }, { key: 'fixare', label: 'Elem. Fixare', icon: 'fa-screw-card', color: 'text-blue-300' }, { key: 'otel', label: 'Oțel Extra', icon: 'fa-cubes', color: 'text-gray-400' }, { key: 'cauciuc', label: 'Cauciuc', icon: 'fa-ring', color: 'text-gray-500' }, { key: 'placaj', label: 'Placaj', icon: 'fa-layer-group', color: 'text-amber-700' }, { key: 'arc', label: 'Arcuri', icon: 'fa-dna', color: 'text-gray-400' }, { key: 'bec', label: 'Becuri', icon: 'fa-lightbulb', color: 'text-yellow-200' }, { key: 'lupa', label: 'Lupe', icon: 'fa-magnifying-glass', color: 'text-blue-200' } ]; config.forEach(c => { if (totals[c.key] > 0) { grid.innerHTML += `<div class="bg-[#171a21] p-2 rounded border border-gray-800 text-center flex flex-col items-center justify-center"><span class="text-xs text-gray-500 mb-1">${c.label}</span><span class="font-bold ${c.color}">${totals[c.key]}</span></div>`; } }); document.getElementById('total-money').innerText = '$' + (totals.bani || 0).toLocaleString('en-US'); document.getElementById('total-fier').innerText = totalFier.toLocaleString('en-US') + ' bucăți'; }
 
-        // SISTEM CALCULATOR DROGURI
         function updateDrugCalc() {
             let coca = parseInt(document.getElementById('calc-coca-input').value) || 0;
             if (coca < 0) { coca = 0; document.getElementById('calc-coca-input').value = 0; }
