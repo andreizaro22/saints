@@ -182,10 +182,10 @@
 
         <div id="auth-forms" class="w-full">
             <div class="grid grid-cols-2 gap-2 mb-6 bg-[#121418] p-1 rounded-lg border border-gray-800">
-                <button type="button" id="tab-btn-login" onclick="switchAuthMode('login')" class="py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition">
+                <button type="button" id="tab-btn-login" onclick="switchAuthMode('login')" class="py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition cursor-pointer">
                     <i class="fa-solid fa-right-to-bracket mr-1"></i> Autentificare
                 </button>
-                <button type="button" id="tab-btn-register" onclick="switchAuthMode('register')" class="py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                <button type="button" id="tab-btn-register" onclick="switchAuthMode('register')" class="py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer">
                     <i class="fa-solid fa-user-plus mr-1"></i> Înregistrare
                 </button>
             </div>
@@ -449,8 +449,8 @@
             const btnLogin = document.getElementById('tab-btn-login');
             const btnReg = document.getElementById('tab-btn-register');
 
-            const activeClass = "py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition";
-            const inactiveClass = "py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition";
+            const activeClass = "py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition cursor-pointer";
+            const inactiveClass = "py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer";
 
             if (mode === 'login') {
                 loginForm.classList.remove('hidden');
