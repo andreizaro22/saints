@@ -420,9 +420,19 @@
                     <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider"><i class="fa-solid fa-truck-fast text-amber-500 mr-2"></i>Sistem Urmărire Comenzi (Stil Curierat)</h3>
                     <p class="text-xs text-gray-500">Urmărește statusul livrării, responsabilul și marchează produsele neaduse/lipsă</p>
                 </div>
-                <button onclick="openAdvancedOrderModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg">
-                    <i class="fa-solid fa-cart-plus mr-1"></i> Creează Comandă Nouă
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex bg-[#0d0f12] p-1 rounded-lg border border-gray-800">
+                        <button id="orders-filter-all" onclick="setOrdersView('all')" class="px-3 py-1.5 bg-[#2b3036] text-white text-xs font-bold rounded-md transition">
+                            <i class="fa-solid fa-list mr-1"></i> Toate Comenzile
+                        </button>
+                        <button id="orders-filter-mine" onclick="setOrdersView('mine')" class="px-3 py-1.5 text-gray-400 hover:text-white text-xs font-bold rounded-md transition">
+                            <i class="fa-solid fa-user-check mr-1"></i> Comenzile Mele
+                        </button>
+                    </div>
+                    <button onclick="openAdvancedOrderModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg">
+                        <i class="fa-solid fa-cart-plus mr-1"></i> Creează Comandă Nouă
+                    </button>
+                </div>
             </div>
 
             <!-- CONTAINER LISTĂ COMENZI SUB FORMĂ DE CARDURI DE CURIERAT -->
@@ -967,22 +977,47 @@
             }
         }
 
+        let ordersView = 'all';
+
+        function setOrdersView(view) {
+            ordersView = view === 'mine' ? 'mine' : 'all';
+
+            const allBtn = document.getElementById('orders-filter-all');
+            const mineBtn = document.getElementById('orders-filter-mine');
+
+            if (allBtn && mineBtn) {
+                allBtn.classList.toggle('bg-[#2b3036]', ordersView === 'all');
+                allBtn.classList.toggle('text-white', ordersView === 'all');
+                allBtn.classList.toggle('text-gray-400', ordersView !== 'all');
+                mineBtn.classList.toggle('bg-[#2b3036]', ordersView === 'mine');
+                mineBtn.classList.toggle('text-white', ordersView === 'mine');
+                mineBtn.classList.toggle('text-gray-400', ordersView !== 'mine');
+            }
+            renderOrders();
+        }
+
         function renderOrders() {
             const container = document.getElementById('orders-cards-container');
             if (!container) return;
             container.innerHTML = '';
 
-            if (orders.length === 0) {
+            const visibleOrders = ordersView === 'mine'
+                ? orders.filter(o => o.createdBy === currentUser.name)
+                : orders;
+
+            if (visibleOrders.length === 0) {
                 container.innerHTML = `
                     <div class="p-8 text-center bg-[#121418] rounded-lg border border-gray-800 text-gray-500 italic">
                         <i class="fa-solid fa-box-open text-4xl mb-3 text-gray-700 block"></i>
-                        Nicio comandă înregistrată în sistem. Apasă pe "Creează Comandă Nouă".
+                        ${ordersView === 'mine'
+                            ? 'Nu ai creat încă nicio comandă.'
+                            : 'Nicio comandă înregistrată în sistem. Apasă pe "Creează Comandă Nouă".'}
                     </div>
                 `;
                 return;
             }
 
-            orders.forEach(o => {
+            visibleOrders.forEach(o => {
                 const status = o.status || 'plasata';
                 const assignedTo = o.assignedTo || '';
                 const items = o.items || [{ type: o.type, item: o.item, customItem: o.customItem, quantity: o.quantity, ammo: o.ammo, status: 'adus' }];
@@ -1345,7 +1380,9 @@
                 items: itemsWithStatus,
                 details: document.getElementById('ord-details').value.trim(),
                 status: 'plasata',
-                assignedTo: ''
+                assignedTo: '',
+                createdBy: currentUser.name,
+                createdAt: new Date().toISOString()
             };
 
             await window.dbRef.addOrder(v);
