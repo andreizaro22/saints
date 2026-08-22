@@ -52,178 +52,114 @@
 </head>
 <body class="min-h-screen flex flex-col justify-center items-center p-4">
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const appId = 'saints-gang-default-app';
-
-        /*
-         * FIREBASE CONFIG
-         * ------------------------------------------------------------
-         * Pentru GitHub Pages, aici trebuie puse datele proiectului tau
-         * Firebase. Momentan raman goale, iar site-ul foloseste
-         * localStorage ca sa NU mai piarda datele la refresh.
-         *
-         * Dupa ce creezi proiectul Firebase, inlocuieste valorile de mai jos.
-         */
-        const firebaseConfig = {
-            apiKey: "",
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: ""
-        };
-
-        let app, db, auth, userId = null;
-
-        // Persistent local fallback: datele raman dupa refresh.
-        let members = JSON.parse(localStorage.getItem('saints_members') || '[]');
-        let orders = JSON.parse(localStorage.getItem('saints_orders') || '[]');
-
-        const saveLocalData = () => {
-            localStorage.setItem('saints_members', JSON.stringify(members));
-            localStorage.setItem('saints_orders', JSON.stringify(orders));
-        };
-
+    <script>
+        let members = [];
+        let orders = [];
         let currentUser = { name: "", role: "", isElJefe: false, isCustomManager: false };
 
-        // Restore current user from sessionStorage on load if available
-        const savedUser = sessionStorage.getItem('saints_current_user');
-        if (savedUser) {
-            try {
+        // Default initial members if local storage is empty
+        const defaultMembers = [
+            { id: "m_1", name: "John Wayne", cnp: "1001", rank: "El Jefe", accessCode: "SAINTS-BOSS", isManager: true, actions: [{ actionName: "Trafic Arms", count: 12 }] },
+            { id: "m_2", name: "Tony Montana", cnp: "1002", rank: "Right Hand", accessCode: "SAINTS-TONY", isManager: false, actions: [{ actionName: "Bank Job", count: 8 }] }
+        ];
+
+        const defaultOrders = [
+            { id: "o_1", category: "Comenzi Droguri", name: "Andrei Pop", cnp: "2001", phone: "555-1234", details: "Ingrediente Preparare", quantity: "50 amoniac + 50 sodiu + 200 plicuri" }
+        ];
+
+        // Load from LocalStorage
+        try {
+            const storedMembers = localStorage.getItem('saints_members_v2');
+            members = storedMembers ? JSON.parse(storedMembers) : defaultMembers;
+            
+            const storedOrders = localStorage.getItem('saints_orders_v2');
+            orders = storedOrders ? JSON.parse(storedOrders) : defaultOrders;
+
+            const savedUser = localStorage.getItem('saints_current_user_v2');
+            if (savedUser) {
                 currentUser = JSON.parse(savedUser);
-            } catch(e) { console.error(e); }
+            }
+        } catch(e) {
+            console.error("Storage parse error:", e);
+            members = defaultMembers;
+            orders = defaultOrders;
         }
 
-        if (Object.keys(firebaseConfig).length > 0) {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-
-            const initAuth = async () => {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    userId = auth.currentUser?.uid || crypto.randomUUID();
-                    initFirestoreListeners();
-                } catch (err) {
-                    console.error("Auth error:", err);
-                    try {
-                        await signInAnonymously(auth);
-                        userId = auth.currentUser?.uid || crypto.randomUUID();
-                        initFirestoreListeners();
-                    } catch (e) {
-                        console.error("Fallback auth error:", e);
-                    }
-                }
-            };
-            initAuth();
-        } else {
-            console.warn("Firebase config is empty. Running in local fallback mode.");
-        }
-
-        function initFirestoreListeners() {
-            if (!db) return;
-            const membersCol = collection(db, 'artifacts', appId, 'public', 'data', 'members');
-            onSnapshot(membersCol, (snapshot) => {
-                members = [];
-                snapshot.forEach(docSnap => {
-                    members.push({ id: docSnap.id, ...docSnap.data() });
-                });
-                
-                // If user was logged in, verify session on reload once members are fetched
+        function saveToStorage() {
+            try {
+                localStorage.setItem('saints_members_v2', JSON.stringify(members));
+                localStorage.setItem('saints_orders_v2', JSON.stringify(orders));
                 if (currentUser && currentUser.name) {
-                    const found = members.find(m => m.name === currentUser.name);
-                    if (found) {
-                        currentUser.role = found.rank;
-                        currentUser.isElJefe = (found.rank === 'El Jefe' || found.isManager);
-                        currentUser.isCustomManager = !!found.isManager;
-                    }
-                    if (document.getElementById('login-screen') && !document.getElementById('login-screen').classList.contains('hidden')) {
-                        document.getElementById('login-screen').classList.add('hidden');
-                        document.getElementById('dashboard-screen').classList.remove('hidden');
-                        let badgeText = `Autentificat: ${currentUser.name} [${currentUser.role}]`;
-                        if (currentUser.isElJefe) badgeText += ' (Boss / Manager)';
-                        document.getElementById('user-badge').innerText = badgeText;
-                    }
+                    localStorage.setItem('saints_current_user_v2', JSON.stringify(currentUser));
+                } else {
+                    localStorage.removeItem('saints_current_user_v2');
                 }
-
-                if (document.getElementById('dashboard-screen') && !document.getElementById('dashboard-screen').classList.contains('hidden')) {
-                    renderMembers();
-                    renderLeaderboard();
-                }
-            }, (error) => console.error("Members snapshot error:", error));
-
-            const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
-            onSnapshot(ordersCol, (snapshot) => {
-                orders = [];
-                snapshot.forEach(docSnap => {
-                    orders.push({ id: docSnap.id, ...docSnap.data() });
-                });
-                if (document.getElementById('dashboard-screen') && !document.getElementById('dashboard-screen').classList.contains('hidden')) {
-                    renderOrders();
-                }
-            }, (error) => console.error("Orders snapshot error:", error));
+            } catch(e) {
+                console.error("Storage write error:", e);
+            }
         }
 
-        // Ensure the current local state exists in browser storage.
-        saveLocalData();
+        // Auto-login check on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            if (currentUser && currentUser.name) {
+                const found = members.find(m => m.name === currentUser.name);
+                if (found) {
+                    currentUser = {
+                        name: found.name,
+                        role: found.rank,
+                        isElJefe: (found.rank === 'El Jefe' || !!found.isManager),
+                        isCustomManager: !!found.isManager
+                    };
+                }
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard-screen').classList.remove('hidden');
+                let badgeText = `Autentificat: ${currentUser.name} [${currentUser.role}]`;
+                if (currentUser.isElJefe) badgeText += ' (Boss / Manager)';
+                document.getElementById('user-badge').innerText = badgeText;
+                renderMembers();
+                renderLeaderboard();
+            }
+        });
 
         window.dbRef = {
             async addMember(memberData) {
-                if (db) {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members'), memberData);
-                } else {
-                    members.push({ id: 'local_' + crypto.randomUUID(), ...memberData });
-                    saveLocalData();
-                    renderMembers();
-                    renderLeaderboard();
-                }
+                const newMember = { id: 'm_' + Date.now() + Math.random().toString(36).substring(2, 5), ...memberData };
+                members.push(newMember);
+                saveToStorage();
+                renderMembers();
+                renderLeaderboard();
+                return newMember;
             },
             async updateMember(docId, updatedData) {
-                if (db) {
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members', String(docId)), updatedData, { merge: true });
-                } else {
-                    let m = members.find(item => item.id == docId);
-                    if (m) Object.assign(m, updatedData);
-                    saveLocalData();
+                let m = members.find(item => item.id == docId);
+                if (m) {
+                    Object.assign(m, updatedData);
+                    if (currentUser && currentUser.name === m.name) {
+                        currentUser.role = m.rank;
+                        currentUser.isElJefe = (m.rank === 'El Jefe' || !!m.isManager);
+                        currentUser.isCustomManager = !!m.isManager;
+                    }
+                    saveToStorage();
                     renderMembers();
                     renderLeaderboard();
                 }
             },
             async deleteMemberDoc(docId) {
-                if (db) {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members', String(docId)));
-                } else {
-                    members = members.filter(item => item.id != docId);
-                    saveLocalData();
-                    renderMembers();
-                    renderLeaderboard();
-                }
+                members = members.filter(item => item.id != docId);
+                saveToStorage();
+                renderMembers();
+                renderLeaderboard();
             },
             async addOrder(orderData) {
-                if (db) {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderData);
-                } else {
-                    orders.push({ id: 'local_' + crypto.randomUUID(), ...orderData });
-                    saveLocalData();
-                    renderOrders();
-                }
+                const newOrder = { id: 'o_' + Date.now() + Math.random().toString(36).substring(2, 5), ...orderData };
+                orders.push(newOrder);
+                saveToStorage();
+                renderOrders();
             },
             async deleteOrderDoc(docId) {
-                if (db) {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', String(docId)));
-                } else {
-                    orders = orders.filter(item => item.id != docId);
-                    saveLocalData();
-                    renderOrders();
-                }
+                orders = orders.filter(item => item.id != docId);
+                saveToStorage();
+                renderOrders();
             }
         };
 
@@ -231,7 +167,7 @@
             getMembers: () => members,
             getOrders: () => orders,
             getCurrentUser: () => currentUser,
-            setCurrentUser: (u) => { currentUser = u; }
+            setCurrentUser: (u) => { currentUser = u; saveToStorage(); }
         };
     </script>
 
@@ -241,7 +177,7 @@
                 <i class="fa-solid fa-users-gear text-2xl text-[#b8860b]"></i>
             </div>
             <h1 class="text-3xl font-black tracking-widest text-gray-100 uppercase">SAINTS</h1>
-            <p class="text-xs text-gray-400 font-semibold tracking-wider mt-1 uppercase">Sistem Gestiune Activitate Gang</p>
+            <p class="text-xs text-gray-400 font-semibold tracking-wider mt-1 uppercase">Sistem Gestiune Activitate Gang (Mod Local)</p>
         </div>
 
         <div id="auth-forms" class="w-full">
@@ -262,8 +198,9 @@
                         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
                             <i class="fa-solid fa-key"></i>
                         </span>
-                        <input type="text" id="login-code" required placeholder="SAINTS-XXXX" class="w-full pl-10 pr-4 py-3 rounded-lg grunge-input text-lg font-mono text-amber-500 text-center font-bold tracking-widest" autocomplete="off">
+                        <input type="text" id="login-code" required placeholder="SAINTS-XXXX" class="w-full pl-10 pr-4 py-3 rounded-lg grunge-input text-lg font-mono text-amber-500 text-center font-bold tracking-widest" autocomplete="off" value="SAINTS-BOSS">
                     </div>
+                    <p class="text-[10px] text-gray-500 text-center mt-1">Implicit Boss: <b>SAINTS-BOSS</b> sau înregistrează-te</p>
                     <p id="login-error" class="text-red-500 text-xs font-bold mt-2 text-center hidden">Cod incorect sau inexistent!</p>
                 </div>
 
@@ -610,7 +547,6 @@
             }
 
             currentUser = { name: user, role: rank, isElJefe: isElJefe, isCustomManager: isCustomManager };
-            sessionStorage.setItem('saints_current_user', JSON.stringify(currentUser));
             window.appState.setCurrentUser(currentUser);
             
             document.getElementById('login-screen').classList.add('hidden');
@@ -626,7 +562,7 @@
         }
 
         function logout() {
-            sessionStorage.removeItem('saints_current_user');
+            localStorage.removeItem('saints_current_user_v2');
             document.getElementById('dashboard-screen').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
             document.getElementById('login-code').value = '';
@@ -1229,21 +1165,21 @@
             },
             "Pistoale": {
                 "Pistol": {
-                    cost: 13000, req: {"Teava": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 1},
-                    attachments: { "Extended Clip": {"Element fixare": 1, "Otel": 1, "Arc": 5}, "Suppressor": {"Element fixare": 1, "Otel": 1, "Cauciuc": 3} }
+                    cost: 13000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 1},
+                    attachments: { "Încărcător Extins": {"Element fixare": 1, "Oțel": 1, "Arc": 5}, "Amortizor": {"Element fixare": 1, "Oțel": 1, "Cauciuc": 3} }
                 },
                 "Pistol .50": {
-                    cost: 52500, req: {"Teava": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3},
-                    attachments: { "Extended Clip": {"Element fixare": 2, "Otel": 1, "Arc": 5} }
+                    cost: 52500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3},
+                    attachments: { "Încărcător Extins": {"Element fixare": 2, "Oțel": 1, "Arc": 5} }
                 }
             },
             "Assault & Heavy": {
                 "Micro SMG": {
-                    cost: 39000, req: {"Teava": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3}
+                    cost: 39000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3}
                 },
                 "Assault Rifle": {
-                    cost: 58500, req: {"Teava": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 7},
-                    attachments: { "Extended Clip": {"Element fixare": 8, "Otel": 1, "Arc": 8} }
+                    cost: 58500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 7},
+                    attachments: { "Încărcător Extins": {"Element fixare": 8, "Oțel": 1, "Arc": 8} }
                 }
             }
         };
@@ -1321,8 +1257,8 @@
             if (reqs["Element fixare"]) totalOtelEquivalent += reqs["Element fixare"] * 2;
             if (reqs["Cadru"]) totalOtelEquivalent += reqs["Cadru"];
             if (reqs["Mecanism"]) totalOtelEquivalent += reqs["Mecanism"];
-            if (reqs["Teava"]) totalOtelEquivalent += reqs["Teava"];
-            if (reqs["Otel"]) totalOtelEquivalent += reqs["Otel"];
+            if (reqs["Țeavă"]) totalOtelEquivalent += reqs["Țeavă"];
+            if (reqs["Oțel"]) totalOtelEquivalent += reqs["Oțel"];
             const totalFier = totalOtelEquivalent * 5;
 
             let html = `
