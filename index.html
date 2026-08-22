@@ -54,7 +54,7 @@
     <script>
         const BIN_ID = "6a898957f5f4af5e2934f86d"; 
         const API_KEY = "$2a$10$aPwopjOmD8yFh81DGxcfAOdM5uU6mrft6qab1tCZ87y8jWoHCqFGm";
-        const COD_GANG_INREGISTRARE = "1122"; // Codul necesar pentru ca un membru nou să se poată înregistra
+        const COD_GANG_INREGISTRARE = "1122"; 
 
         let members = [];
         let orders = [];
@@ -213,10 +213,10 @@
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">Nume IC</label>
                     <input type="text" id="login-name" required placeholder="Ex: John Wayne" class="w-full px-4 py-3 rounded-lg grunge-input text-lg font-bold text-center text-white mb-4">
                     
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">Parola Ta Personală</label>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">Codul tău</label>
                     <input type="password" id="login-pass" required placeholder="****" class="w-full px-4 py-3 rounded-lg grunge-input text-lg font-bold text-center text-amber-500 tracking-widest">
                     
-                    <p id="login-error" class="text-red-500 text-xs font-bold mt-3 text-center hidden">Nume sau parolă incorectă!</p>
+                    <p id="login-error" class="text-red-500 text-xs font-bold mt-3 text-center hidden">Nume sau cod incorect!</p>
                 </div>
 
                 <button type="submit" class="w-full py-3 mt-4 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg">
@@ -245,11 +245,11 @@
                         <option value="El Jefe">El Jefe</option>
                     </select>
 
-                    <label class="block text-xs font-bold text-amber-500 uppercase tracking-wider mt-2 mb-1">Setează Parola Ta Personală</label>
-                    <input type="password" id="reg-user-pass" required placeholder="Parola cu care te vei loga" class="w-full px-3 py-2 rounded-lg grunge-input text-sm font-bold text-amber-400">
+                    <label class="block text-xs font-bold text-amber-500 uppercase tracking-wider mt-2 mb-1">Setează un cod</label>
+                    <input type="password" id="reg-user-pass" required placeholder="Cod" class="w-full px-3 py-2 rounded-lg grunge-input text-sm font-bold text-amber-400">
 
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Cod Gang Acces (1122)</label>
-                    <input type="password" id="reg-gang-code" required placeholder="Codul secret al gangului" class="w-full px-3 py-2 rounded-lg grunge-input text-sm font-mono">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Cod acces gang</label>
+                    <input type="password" id="reg-gang-code" required placeholder="Cod gang" class="w-full px-3 py-2 rounded-lg grunge-input text-sm font-mono">
                 </div>
 
                 <button type="submit" class="w-full py-3 mt-2 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg">
@@ -257,7 +257,7 @@
                     <i class="fa-solid fa-user-check"></i>
                 </button>
                 
-                <p id="reg-success" class="text-green-500 text-xs font-bold mt-2 text-center hidden">Cont creat! Te poți loga acum.</p>
+                <p id="reg-success" class="text-green-500 text-xs font-bold mt-2 text-center hidden">Cont creat!</p>
             </form>
         </div>
     </div>
@@ -390,7 +390,7 @@
             const gangCode = document.getElementById('reg-gang-code').value.trim();
 
             if (gangCode !== COD_GANG_INREGISTRARE) {
-                showModal({ title: 'Eroare Securitate', message: 'Codul de acces al gangului este incorect! Cere codul de la El Jefe.', type: 'alert' });
+                showModal({ title: 'Eroare', message: 'Cod acces gang incorect!', type: 'alert' });
                 return;
             }
 
@@ -398,7 +398,7 @@
 
             const exista = members.find(m => m.name.toLowerCase() === name.toLowerCase());
             if (exista) {
-                showModal({ title: 'Eroare', message: 'Există deja un membru înregistrat cu acest nume!', type: 'alert' });
+                showModal({ title: 'Eroare', message: 'Nume deja înregistrat!', type: 'alert' });
                 return;
             }
 
@@ -429,13 +429,13 @@
             const foundMember = members.find(m => m.name.toLowerCase() === name.toLowerCase());
 
             if (!foundMember) {
-                errorEl.innerText = "Numele nu a fost găsit. Mergi la Înregistrare mai întâi!";
+                errorEl.innerText = "Nume negăsit! Înregistrează-te.";
                 errorEl.classList.remove('hidden');
                 return;
             }
 
             if (foundMember.pass && foundMember.pass !== pass) {
-                errorEl.innerText = "Parola introduse este greșită!";
+                errorEl.innerText = "Cod incorect!";
                 errorEl.classList.remove('hidden');
                 return;
             }
@@ -495,9 +495,9 @@
                 
                 let btns = canManage ? `
                     <button onclick="logAction('${m.id}')" class="px-2 py-1 bg-green-950/60 border border-green-800 text-green-400 hover:bg-green-900 rounded text-xs mr-1" title="Adaugă acțiune"><i class="fa-solid fa-plus"></i></button>
-                    <button onclick="reduceAction('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs mr-2" title="Scade/Modifică acțiune"><i class="fa-solid fa-minus"></i></button>
+                    <button onclick="reduceAction('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs mr-2" title="Scade acțiune"><i class="fa-solid fa-minus"></i></button>
                     <button onclick="deleteMember('${m.id}')" class="px-2 py-1 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-xs" title="Șterge membru"><i class="fa-solid fa-trash"></i></button>
-                ` : `<span class="text-xs text-gray-600">Doar vizualizare</span>`;
+                ` : `<span class="text-xs text-gray-600">Vizualizare</span>`;
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-white/5 border-t border-gray-800/50">
@@ -538,8 +538,8 @@
         function logAction(id) {
             const m = members.find(item => item.id == id);
             showModal({
-                title: `Adaugă activitate pentru ${m.name}`, type: 'prompt',
-                inputs: [{ id: 'numeA', label: 'Tip acțiune (Ex: Craft, Tura, Rob)' }, { id: 'nrA', label: 'Câte adaugi?', type: 'number', value: 1 }],
+                title: `Adaugă activitate (${m.name})`, type: 'prompt',
+                inputs: [{ id: 'numeA', label: 'Tip acțiune' }, { id: 'nrA', label: 'Cantitate', type: 'number', value: 1 }],
                 onConfirm: async (vals) => {
                     let actionsArr = m.actions || [];
                     let existing = actionsArr.find(a => a.actionName.toLowerCase() === vals.numeA.toLowerCase());
@@ -553,14 +553,14 @@
         function reduceAction(id) {
             const m = members.find(item => item.id == id);
             if (!m.actions || m.actions.length === 0) {
-                showModal({ title: 'Atenție', message: 'Acest membru nu are nicio activitate de scăzut.', type: 'alert' });
+                showModal({ title: 'Atenție', message: 'Nicio activitate de scăzut.', type: 'alert' });
                 return;
             }
             showModal({
-                title: `Scade/Șterge activitate la ${m.name}`, type: 'prompt',
+                title: `Scade activitate (${m.name})`, type: 'prompt',
                 inputs: [
-                    { id: 'numeA', label: 'Numele acțiunii de scăzut' }, 
-                    { id: 'nrA', label: 'Câte scazi?', type: 'number', value: 1 }
+                    { id: 'numeA', label: 'Nume acțiune' }, 
+                    { id: 'nrA', label: 'Scade', type: 'number', value: 1 }
                 ],
                 onConfirm: async (vals) => {
                     let actionsArr = m.actions || [];
@@ -572,24 +572,24 @@
                         }
                         await window.dbRef.updateMember(id, { actions: actionsArr });
                     } else {
-                        showModal({ title: 'Eroare', message: 'Nu s-a găsit o acțiune cu acest nume la membrul respectiv!', type: 'alert' });
+                        showModal({ title: 'Eroare', message: 'Acțiunea nu a fost găsită!', type: 'alert' });
                     }
                 }
             });
         }
 
         function deleteMember(id) {
-            showModal({ title: 'Confirmare', message: 'Ești sigur că vrei să ștergi definitiv acest membru?', type: 'confirm', onConfirm: () => window.dbRef.deleteMemberDoc(id) });
+            showModal({ title: 'Confirmare', message: 'Ștergi membrul?', type: 'confirm', onConfirm: () => window.dbRef.deleteMemberDoc(id) });
         }
 
         function openAddModal() {
             showModal({
-                title: 'Adaugă Membru Nou', type: 'prompt',
+                title: 'Membru Nou', type: 'prompt',
                 inputs: [
                     { id: 'n', label: 'Nume IC' }, 
-                    { id: 'c', label: 'CNP/ID' }, 
+                    { id: 'c', label: 'CNP' }, 
                     { id: 'r', label: 'Grad', type: 'select', options: ['Associate', 'Dealer', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] },
-                    { id: 'p', label: 'Parolă Inițială', value: '1234' }
+                    { id: 'p', label: 'Cod', value: '1122' }
                 ],
                 onConfirm: async (v) => await window.dbRef.addMember({ name: v.n, cnp: v.c, rank: v.r, pass: v.p, actions: [] })
             });
@@ -598,14 +598,14 @@
         function openOrderModal() {
             showModal({
                 title: 'Comandă Nouă', type: 'prompt',
-                inputs: [{ id: 'n', label: 'Nume Client' }, { id: 'c', label: 'CNP' }, { id: 'p', label: 'Telefon' }, { id: 'd', label: 'Detalii comanda' }, { id: 'q', label: 'Cantitate' }],
+                inputs: [{ id: 'n', label: 'Nume Client' }, { id: 'c', label: 'CNP' }, { id: 'p', label: 'Telefon' }, { id: 'd', label: 'Detalii' }, { id: 'q', label: 'Cantitate' }],
                 onConfirm: async (v) => await window.dbRef.addOrder({ name: v.n, cnp: v.c, phone: v.p, details: v.d, quantity: v.q })
             });
         }
 
         function resetWeeklyData() {
             showModal({
-                title: 'Reset Săptămânal', message: 'Se vor șterge toate acțiunile adunate ale membrilor pentru a începe o nouă săptămână. Continui?', type: 'confirm', 
+                title: 'Reset Săptămânal', message: 'Resetat toate acțiunile la zero?', type: 'confirm', 
                 onConfirm: async () => { for (let m of members) await window.dbRef.updateMember(m.id, { actions: [] }); }
             });
         }
