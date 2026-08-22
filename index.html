@@ -103,15 +103,31 @@
                     }
                 });
             } catch (err) {
-                console.warn("Cloud indisponibil, trecere pe stocare locală:", err);
+                console.warn("Cloud indisponibil, trecere pe stocare locală robustă:", err);
                 document.getElementById('cloud-status-indicator').innerHTML = '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 mr-1"></span> Mod Local / Sincronizat';
                 loadFromLocalStorage();
                 checkAndRestoreSession();
             }
         }
 
-        function setupCloudListeners(appId) {
+        async function setupCloudListeners(appId) {
             const membersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_members_db');
+            
+            // Verificare inițială a documentelor existente înainte de onSnapshot pentru a evita suprascrierea datelor locale dacă cloud-ul e gol
+            try {
+                const initialSnap = await getDocs(membersCol);
+                if (initialSnap.empty) {
+                    // Dacă cloud-ul este complet gol, populăm cu datele locale salvate anterior sau cu cele default
+                    const localSaved = localStorage.getItem('saints_members_v8');
+                    const initialList = localSaved ? JSON.parse(localSaved) : defaultMembers;
+                    for (let m of initialList) {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', m.id), m);
+                    }
+                }
+            } catch (e) {
+                console.error("Eroare verificare inițială membri cloud:", e);
+            }
+
             onSnapshot(membersCol, (snapshot) => {
                 let cloudMembers = [];
                 snapshot.forEach(docSnap => {
@@ -121,9 +137,6 @@
                 if (cloudMembers.length > 0) {
                     members = cloudMembers;
                 } else {
-                    defaultMembers.forEach(async (m) => {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', m.id), m);
-                    });
                     members = defaultMembers;
                 }
                 saveToLocalStorage();
@@ -132,9 +145,23 @@
                 checkAndRestoreSession();
             }, (error) => {
                 console.error("Eroare membrii cloud:", error);
+                loadFromLocalStorage();
             });
 
             const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db');
+            try {
+                const initialOrdersSnap = await getDocs(ordersCol);
+                if (initialOrdersSnap.empty) {
+                    const localOrdersSaved = localStorage.getItem('saints_orders_v8');
+                    const initialOrdersList = localOrdersSaved ? JSON.parse(localOrdersSaved) : defaultOrders;
+                    for (let o of initialOrdersList) {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', o.id), o);
+                    }
+                }
+            } catch (e) {
+                console.error("Eroare verificare inițială comenzi cloud:", e);
+            }
+
             onSnapshot(ordersCol, (snapshot) => {
                 let cloudOrders = [];
                 snapshot.forEach(docSnap => {
@@ -144,15 +171,13 @@
                 if (cloudOrders.length > 0 || snapshot.size > 0) {
                     orders = cloudOrders;
                 } else {
-                    defaultOrders.forEach(async (o) => {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', o.id), o);
-                    });
                     orders = defaultOrders;
                 }
                 saveToLocalStorage();
                 renderOrders();
             }, (error) => {
                 console.error("Eroare comenzi cloud:", error);
+                loadFromLocalStorage();
             });
         }
 
@@ -206,33 +231,34 @@
             }
         }
 
-        // Metode globale pentru manipularea bazei de date (Cloud + Local Backup)
+        // Metode globale îmbunătățite pentru salvare sigură atât în Cloud cât și Local instantaneu
         window.dbRef = {
             async addMember(memberData) {
                 const newId = 'm_' + Date.now() + Math.random().toString(36).substring(2, 5);
+                // Actualizare locală imediată
+                members.push({ id: newId, ...memberData });
+                saveToLocalStorage();
+                renderMembers();
+                renderLeaderboard();
+
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', newId), memberData);
-                } else {
-                    members.push({ id: newId, ...memberData });
-                    saveToLocalStorage();
-                    renderMembers();
-                    renderLeaderboard();
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', newId), memberData);
+                    } catch(err) {
+                        console.error("Eroare salvare cloud membru:", err);
+                    }
                 }
                 return newId;
             },
             async updateMember(docId, updatedData) {
-                if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId), updatedData);
-                } else {
-                    let m = members.find(item => item.id == docId);
-                    if (m) {
-                        Object.assign(m, updatedData);
-                        saveToLocalStorage();
-                        renderMembers();
-                        renderLeaderboard();
-                    }
+                // Actualizare locală imediată
+                let m = members.find(item => item.id == docId);
+                if (m) {
+                    Object.assign(m, updatedData);
+                    saveToLocalStorage();
+                    renderMembers();
+                    renderLeaderboard();
                 }
                 let mLocal = members.find(item => item.id == docId);
                 if (mLocal && currentUser && currentUser.accessCode === mLocal.accessCode) {
@@ -240,37 +266,58 @@
                     currentUser.isElJefe = (mLocal.rank === 'El Jefe' || !!mLocal.isManager);
                     currentUser.isCustomManager = !!mLocal.isManager;
                 }
+
+                if (isCloudSynced && db) {
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId), updatedData);
+                    } catch(err) {
+                        console.error("Eroare actualizare cloud membru:", err);
+                    }
+                }
             },
             async deleteMemberDoc(docId) {
+                members = members.filter(item => item.id != docId);
+                saveToLocalStorage();
+                renderMembers();
+                renderLeaderboard();
+
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId));
-                } else {
-                    members = members.filter(item => item.id != docId);
-                    saveToLocalStorage();
-                    renderMembers();
-                    renderLeaderboard();
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId));
+                    } catch(err) {
+                        console.error("Eroare ștergere cloud membru:", err);
+                    }
                 }
             },
             async addOrder(orderData) {
                 const newId = 'o_' + Date.now() + Math.random().toString(36).substring(2, 5);
+                orders.push({ id: newId, ...orderData });
+                saveToLocalStorage();
+                renderOrders();
+
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', newId), orderData);
-                } else {
-                    orders.push({ id: newId, ...orderData });
-                    saveToLocalStorage();
-                    renderOrders();
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', newId), orderData);
+                    } catch(err) {
+                        console.error("Eroare salvare cloud comandă:", err);
+                    }
                 }
             },
             async deleteOrderDoc(docId) {
+                orders = orders.filter(item => item.id != docId);
+                saveToLocalStorage();
+                renderOrders();
+
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', docId));
-                } else {
-                    orders = orders.filter(item => item.id != docId);
-                    saveToLocalStorage();
-                    renderOrders();
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-master-cloud-v3';
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', docId));
+                    } catch(err) {
+                        console.error("Eroare ștergere cloud comandă:", err);
+                    }
                 }
             }
         };
