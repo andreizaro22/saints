@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAINTS - Gestiune Gang Roleplay</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- html2canvas for PNG export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
@@ -16,8 +19,8 @@
         }
 
         .grunge-card {
-            background: rgba(23, 25, 29, 0.88);
-            backdrop-filter: blur(8px);
+            background: rgba(23, 25, 29, 0.92);
+            backdrop-filter: blur(10px);
             border: 2px solid #52473f;
             box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(184, 115, 51, 0.15);
         }
@@ -52,13 +55,11 @@
 </head>
 <body class="min-h-screen flex flex-col justify-center items-center p-4">
 
-    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Firebase handles
         let app, db, auth;
         let members = [];
         let orders = [];
@@ -76,7 +77,7 @@
 
         async function initFirebase() {
             try {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
                 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 
                 if (!firebaseConfig) {
@@ -97,7 +98,6 @@
                     if (user) {
                         isCloudSynced = true;
                         setupCloudListeners(appId);
-                        checkAndRestoreSession();
                     }
                 });
             } catch (err) {
@@ -108,18 +108,20 @@
         }
 
         function setupCloudListeners(appId) {
-            const membersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_members');
+            // RULE 1: STRICT PATHS for public data sync
+            const membersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_members_db');
             onSnapshot(membersCol, (snapshot) => {
                 let cloudMembers = [];
                 snapshot.forEach(docSnap => {
                     cloudMembers.push({ id: docSnap.id, ...docSnap.data() });
                 });
+                
                 if (cloudMembers.length > 0) {
                     members = cloudMembers;
                 } else {
-                    // Seed initial data if empty
+                    // Seed initial data if database is empty
                     defaultMembers.forEach(async (m) => {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members', m.id), m);
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', m.id), m);
                     });
                     members = defaultMembers;
                 }
@@ -130,17 +132,18 @@
                 console.error("Members snapshot error:", error);
             });
 
-            const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_orders');
+            const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db');
             onSnapshot(ordersCol, (snapshot) => {
                 let cloudOrders = [];
                 snapshot.forEach(docSnap => {
                     cloudOrders.push({ id: docSnap.id, ...docSnap.data() });
                 });
+                
                 if (cloudOrders.length > 0 || snapshot.size > 0) {
                     orders = cloudOrders;
                 } else {
                     defaultOrders.forEach(async (o) => {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders', o.id), o);
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', o.id), o);
                     });
                     orders = defaultOrders;
                 }
@@ -152,10 +155,10 @@
 
         function loadFromLocalStorage() {
             try {
-                const storedMembers = localStorage.getItem('saints_members_v6');
+                const storedMembers = localStorage.getItem('saints_members_v7');
                 members = storedMembers ? JSON.parse(storedMembers) : defaultMembers;
                 
-                const storedOrders = localStorage.getItem('saints_orders_v6');
+                const storedOrders = localStorage.getItem('saints_orders_v7');
                 orders = storedOrders ? JSON.parse(storedOrders) : defaultOrders;
             } catch(e) {
                 members = defaultMembers;
@@ -165,30 +168,28 @@
 
         function saveToLocalStorage() {
             try {
-                localStorage.setItem('saints_members_v6', JSON.stringify(members));
-                localStorage.setItem('saints_orders_v6', JSON.stringify(orders));
+                localStorage.setItem('saints_members_v7', JSON.stringify(members));
+                localStorage.setItem('saints_orders_v7', JSON.stringify(orders));
             } catch(e) {}
         }
 
         window.dbRef = {
             async addMember(memberData) {
                 const newId = 'm_' + Date.now() + Math.random().toString(36).substring(2, 5);
-                const newMember = { id: newId, ...memberData };
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members', newId), memberData);
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', newId), memberData);
                 } else {
-                    members.push(newMember);
+                    members.push({ id: newId, ...memberData });
                     saveToLocalStorage();
                     renderMembers();
                     renderLeaderboard();
                 }
-                return newMember;
             },
             async updateMember(docId, updatedData) {
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members', docId), updatedData);
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId), updatedData);
                 } else {
                     let m = members.find(item => item.id == docId);
                     if (m) {
@@ -207,8 +208,8 @@
             },
             async deleteMemberDoc(docId) {
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members', docId));
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_members_db', docId));
                 } else {
                     members = members.filter(item => item.id != docId);
                     saveToLocalStorage();
@@ -219,8 +220,8 @@
             async addOrder(orderData) {
                 const newId = 'o_' + Date.now() + Math.random().toString(36).substring(2, 5);
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders', newId), orderData);
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', newId), orderData);
                 } else {
                     orders.push({ id: newId, ...orderData });
                     saveToLocalStorage();
@@ -229,8 +230,8 @@
             },
             async deleteOrderDoc(docId) {
                 if (isCloudSynced && db) {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-default';
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders', docId));
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-rp-cloud-v1';
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'saints_orders_db', docId));
                 } else {
                     orders = orders.filter(item => item.id != docId);
                     saveToLocalStorage();
@@ -246,20 +247,19 @@
             setCurrentUser: (u) => { 
                 currentUser = u; 
                 if (u && u.accessCode) {
-                    localStorage.setItem('saints_active_code_v6', u.accessCode);
+                    localStorage.setItem('saints_active_code_v7', u.accessCode);
                 } else {
-                    localStorage.removeItem('saints_active_code_v6');
+                    localStorage.removeItem('saints_active_code_v7');
                 }
             }
         };
 
-        // Initialize Firebase on load
         window.addEventListener('DOMContentLoaded', () => {
             initFirebase();
         });
 
         function checkAndRestoreSession() {
-            const savedCode = localStorage.getItem('saints_active_code_v6');
+            const savedCode = localStorage.getItem('saints_active_code_v7');
             if (savedCode && members.length > 0) {
                 const found = members.find(m => m.accessCode && m.accessCode.toUpperCase() === savedCode.toUpperCase());
                 if (found) {
@@ -291,10 +291,10 @@
     <div id="login-screen" class="w-full max-w-md grunge-card rounded-xl p-8 transition-all">
         <div class="flex flex-col items-center mb-6 text-center">
             <div class="w-16 h-16 rounded-full bg-[#2a2420] border border-[#6b5545] flex items-center justify-center mb-3 shadow-inner">
-                <i class="fa-solid fa-users-gear text-2xl text-[#b8860b]"></i>
+                <i class="fa-solid fa-cloud text-2xl text-amber-500"></i>
             </div>
             <h1 class="text-3xl font-black tracking-widest text-gray-100 uppercase">SAINTS</h1>
-            <p class="text-xs text-gray-400 font-semibold tracking-wider mt-1 uppercase">Sistem Gestiune Activitate Gang (Mod Local)</p>
+            <p class="text-xs text-amber-400 font-semibold tracking-wider mt-1 uppercase">Sincronizat în Baza de Date Cloud</p>
         </div>
 
         <div id="auth-forms" class="w-full">
@@ -317,7 +317,7 @@
                         </span>
                         <input type="text" id="login-code" required placeholder="SAINTS-XXXX" class="w-full pl-10 pr-4 py-3 rounded-lg grunge-input text-lg font-mono text-amber-500 text-center font-bold tracking-widest" autocomplete="off" value="SAINTS-BOSS">
                     </div>
-                    <p class="text-[10px] text-gray-500 text-center mt-1">Implicit Boss: <b>SAINTS-BOSS</b> sau înregistrează-te</p>
+                    <p class="text-[10px] text-gray-500 text-center mt-1">Boss implicit: <b>SAINTS-BOSS</b></p>
                     <p id="login-error" class="text-red-500 text-xs font-bold mt-2 text-center hidden">Cod incorect sau inexistent!</p>
                 </div>
 
@@ -364,14 +364,14 @@
                 </div>
 
                 <button type="submit" class="w-full py-3 mt-2 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg cursor-pointer">
-                    <span>Înregistrare și Obține Cod</span>
+                    <span>Înregistrare Cloud</span>
                     <i class="fa-solid fa-user-check"></i>
                 </button>
 
                 <div id="reg-result-box" class="hidden mt-4 p-3 bg-black/60 border border-[#b8860b] rounded-lg text-center animate-pulse">
                     <p class="text-[10px] text-amber-500 font-bold uppercase tracking-wider mb-1">Codul tău unic generat:</p>
                     <div id="reg-generated-code" class="text-xl font-mono font-black text-white tracking-widest bg-[#1f1a17] py-1.5 px-3 rounded border border-[#6b5545] select-all"></div>
-                    <p class="text-[9px] text-gray-400 mt-1.5">Salvează acest cod! Vei avea nevoie de el la logare.</p>
+                    <p class="text-[9px] text-gray-400 mt-1.5">Salvat în baza de date! Poți intra de pe orice browser.</p>
                 </div>
             </form>
         </div>
@@ -680,7 +680,7 @@
         }
 
         function logout() {
-            localStorage.removeItem('saints_active_code_v6');
+            localStorage.removeItem('saints_active_code_v7');
             document.getElementById('dashboard-screen').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
             document.getElementById('login-code').value = '';
@@ -883,7 +883,6 @@
             document.getElementById('calc-receipt').innerHTML = html;
         }
 
-        // Weapon calculator database
         const weaponsDB = {
             "Cuțite (Melee)": {
                 "Knife": { cost: 13000, req: {"Element fixare": 1, "Cauciuc": 1} },
@@ -1298,11 +1297,10 @@
                 title: 'Resetare Săptămânală',
                 message: 'Sigur dorești să resetezi toate acțiunile membrilor la 0?',
                 onConfirm: async () => {
-                    for (let m of window.appState.getMembers()) {
+                    const membersList = window.appState.getMembers();
+                    for (let m of membersList) {
                         await window.dbRef.updateMember(m.id, { actions: [] });
                     }
-                    renderMembers();
-                    renderLeaderboard();
                 }
             });
         }
@@ -1326,11 +1324,11 @@
                 customHTML: html,
                 onConfirmCustom: async () => {
                     const mId = document.getElementById('mgr-member-id').value;
-                    let target = members.find(item => item.id === mId);
+                    let membersList = window.appState.getMembers();
+                    let target = membersList.find(item => item.id === mId);
                     if (target) {
-                        target.isManager = !target.isManager;
-                        saveToStorage();
-                        renderMembers();
+                        let newManagerStatus = !target.isManager;
+                        await window.dbRef.updateMember(mId, { isManager: newManagerStatus });
                     }
                     closeModal();
                 }
