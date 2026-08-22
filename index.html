@@ -57,12 +57,37 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'saints-gang-default-app';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = 'saints-gang-default-app';
+
+        /*
+         * FIREBASE CONFIG
+         * ------------------------------------------------------------
+         * Pentru GitHub Pages, aici trebuie puse datele proiectului tau
+         * Firebase. Momentan raman goale, iar site-ul foloseste
+         * localStorage ca sa NU mai piarda datele la refresh.
+         *
+         * Dupa ce creezi proiectul Firebase, inlocuieste valorile de mai jos.
+         */
+        const firebaseConfig = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
 
         let app, db, auth, userId = null;
-        let members = [];
-        let orders = [];
+
+        // Persistent local fallback: datele raman dupa refresh.
+        let members = JSON.parse(localStorage.getItem('saints_members') || '[]');
+        let orders = JSON.parse(localStorage.getItem('saints_orders') || '[]');
+
+        const saveLocalData = () => {
+            localStorage.setItem('saints_members', JSON.stringify(members));
+            localStorage.setItem('saints_orders', JSON.stringify(orders));
+        };
+
         let currentUser = { name: "", role: "", isElJefe: false, isCustomManager: false };
 
         // Restore current user from sessionStorage on load if available
@@ -147,12 +172,16 @@
             }, (error) => console.error("Orders snapshot error:", error));
         }
 
+        // Ensure the current local state exists in browser storage.
+        saveLocalData();
+
         window.dbRef = {
             async addMember(memberData) {
                 if (db) {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members'), memberData);
                 } else {
-                    members.push({ id: 'local_' + Math.random(), ...memberData });
+                    members.push({ id: 'local_' + crypto.randomUUID(), ...memberData });
+                    saveLocalData();
                     renderMembers();
                     renderLeaderboard();
                 }
@@ -163,6 +192,7 @@
                 } else {
                     let m = members.find(item => item.id == docId);
                     if (m) Object.assign(m, updatedData);
+                    saveLocalData();
                     renderMembers();
                     renderLeaderboard();
                 }
@@ -172,6 +202,7 @@
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members', String(docId)));
                 } else {
                     members = members.filter(item => item.id != docId);
+                    saveLocalData();
                     renderMembers();
                     renderLeaderboard();
                 }
@@ -180,7 +211,8 @@
                 if (db) {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderData);
                 } else {
-                    orders.push({ id: 'local_' + Math.random(), ...orderData });
+                    orders.push({ id: 'local_' + crypto.randomUUID(), ...orderData });
+                    saveLocalData();
                     renderOrders();
                 }
             },
@@ -189,6 +221,7 @@
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', String(docId)));
                 } else {
                     orders = orders.filter(item => item.id != docId);
+                    saveLocalData();
                     renderOrders();
                 }
             }
