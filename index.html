@@ -55,9 +55,8 @@
     <script>
         let members = [];
         let orders = [];
-        let currentUser = { name: "", role: "", isElJefe: false, isCustomManager: false };
+        let currentUser = { name: "", role: "", isElJefe: false, isCustomManager: false, accessCode: "" };
 
-        // Default initial members if local storage is empty
         const defaultMembers = [
             { id: "m_1", name: "John Wayne", cnp: "1001", rank: "El Jefe", accessCode: "SAINTS-BOSS", isManager: true, actions: [{ actionName: "Trafic Arms", count: 12 }] },
             { id: "m_2", name: "Tony Montana", cnp: "1002", rank: "Right Hand", accessCode: "SAINTS-TONY", isManager: false, actions: [{ actionName: "Bank Job", count: 8 }] }
@@ -67,59 +66,90 @@
             { id: "o_1", category: "Comenzi Droguri", name: "Andrei Pop", cnp: "2001", phone: "555-1234", details: "Ingrediente Preparare", quantity: "50 amoniac + 50 sodiu + 200 plicuri" }
         ];
 
-        // Load from LocalStorage
+        // Load storage with safe fallbacks across browser sessions/tabs
         try {
-            const storedMembers = localStorage.getItem('saints_members_v2');
+            const storedMembers = localStorage.getItem('saints_members_v4');
             members = storedMembers ? JSON.parse(storedMembers) : defaultMembers;
             
-            const storedOrders = localStorage.getItem('saints_orders_v2');
+            const storedOrders = localStorage.getItem('saints_orders_v4');
             orders = storedOrders ? JSON.parse(storedOrders) : defaultOrders;
 
-            const savedUser = localStorage.getItem('saints_current_user_v2');
-            if (savedUser) {
-                currentUser = JSON.parse(savedUser);
+            const savedCode = localStorage.getItem('saints_active_code_v4');
+            if (savedCode) {
+                const found = members.find(m => m.accessCode && m.accessCode.toUpperCase() === savedCode.toUpperCase());
+                if (found) {
+                    currentUser = {
+                        name: found.name,
+                        role: found.rank,
+                        isElJefe: (found.rank === 'El Jefe' || !!found.isManager),
+                        isCustomManager: !!found.isManager,
+                        accessCode: found.accessCode
+                    };
+                }
             }
         } catch(e) {
-            console.error("Storage parse error:", e);
+            console.error("Storage load error:", e);
             members = defaultMembers;
             orders = defaultOrders;
         }
 
         function saveToStorage() {
             try {
-                localStorage.setItem('saints_members_v2', JSON.stringify(members));
-                localStorage.setItem('saints_orders_v2', JSON.stringify(orders));
-                if (currentUser && currentUser.name) {
-                    localStorage.setItem('saints_current_user_v2', JSON.stringify(currentUser));
+                localStorage.setItem('saints_members_v4', JSON.stringify(members));
+                localStorage.setItem('saints_orders_v4', JSON.stringify(orders));
+                if (currentUser && currentUser.accessCode) {
+                    localStorage.setItem('saints_active_code_v4', currentUser.accessCode);
                 } else {
-                    localStorage.removeItem('saints_current_user_v2');
+                    localStorage.removeItem('saints_active_code_v4');
                 }
             } catch(e) {
-                console.error("Storage write error:", e);
+                console.error("Storage save error:", e);
             }
         }
 
-        // Auto-login check on page load
+        // Auto restore session instantly across browser refreshes and tab syncs
         window.addEventListener('DOMContentLoaded', () => {
-            if (currentUser && currentUser.name) {
-                const found = members.find(m => m.name === currentUser.name);
+            checkAndRestoreSession();
+        });
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'saints_members_v4' || e.key === 'saints_active_code_v4') {
+                try {
+                    const storedMembers = localStorage.getItem('saints_members_v4');
+                    if (storedMembers) members = JSON.parse(storedMembers);
+                    checkAndRestoreSession();
+                } catch(err) { console.error(err); }
+            }
+        });
+
+        function checkAndRestoreSession() {
+            const savedCode = localStorage.getItem('saints_active_code_v4');
+            if (savedCode) {
+                const found = members.find(m => m.accessCode && m.accessCode.toUpperCase() === savedCode.toUpperCase());
                 if (found) {
                     currentUser = {
                         name: found.name,
                         role: found.rank,
                         isElJefe: (found.rank === 'El Jefe' || !!found.isManager),
-                        isCustomManager: !!found.isManager
+                        isCustomManager: !!found.isManager,
+                        accessCode: found.accessCode
                     };
+                    const loginScreen = document.getElementById('login-screen');
+                    const dashScreen = document.getElementById('dashboard-screen');
+                    if (loginScreen && dashScreen) {
+                        loginScreen.classList.add('hidden');
+                        dashScreen.classList.remove('hidden');
+                        let badgeText = `Autentificat: ${currentUser.name} [${currentUser.role}]`;
+                        if (currentUser.isElJefe) badgeText += ' (Boss / Manager)';
+                        const badgeEl = document.getElementById('user-badge');
+                        if (badgeEl) badgeEl.innerText = badgeText;
+                        renderMembers();
+                        renderLeaderboard();
+                        renderOrders();
+                    }
                 }
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('dashboard-screen').classList.remove('hidden');
-                let badgeText = `Autentificat: ${currentUser.name} [${currentUser.role}]`;
-                if (currentUser.isElJefe) badgeText += ' (Boss / Manager)';
-                document.getElementById('user-badge').innerText = badgeText;
-                renderMembers();
-                renderLeaderboard();
             }
-        });
+        }
 
         window.dbRef = {
             async addMember(memberData) {
@@ -134,7 +164,7 @@
                 let m = members.find(item => item.id == docId);
                 if (m) {
                     Object.assign(m, updatedData);
-                    if (currentUser && currentUser.name === m.name) {
+                    if (currentUser && currentUser.accessCode && currentUser.accessCode === m.accessCode) {
                         currentUser.role = m.rank;
                         currentUser.isElJefe = (m.rank === 'El Jefe' || !!m.isManager);
                         currentUser.isCustomManager = !!m.isManager;
@@ -204,7 +234,7 @@
                     <p id="login-error" class="text-red-500 text-xs font-bold mt-2 text-center hidden">Cod incorect sau inexistent!</p>
                 </div>
 
-                <button type="submit" class="w-full py-3 mt-4 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg">
+                <button type="submit" class="w-full py-3 mt-4 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg cursor-pointer">
                     <span>Intră în Panou</span>
                     <i class="fa-solid fa-right-to-bracket"></i>
                 </button>
@@ -246,7 +276,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="w-full py-3 mt-2 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg">
+                <button type="submit" class="w-full py-3 mt-2 rounded-lg btn-industrial font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg cursor-pointer">
                     <span>Înregistrare și Obține Cod</span>
                     <i class="fa-solid fa-user-check"></i>
                 </button>
@@ -273,28 +303,28 @@
             </div>
 
             <div class="flex flex-wrap items-center justify-center gap-2 bg-[#121418] p-1.5 rounded-lg border border-gray-800">
-                <button onclick="switchTab('members')" id="btn-tab-members" class="px-4 py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition">
+                <button onclick="switchTab('members')" id="btn-tab-members" class="px-4 py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition cursor-pointer">
                     <i class="fa-solid fa-users mr-1"></i> Membri & Activitate
                 </button>
-                <button onclick="switchTab('leaderboard')" id="btn-tab-leaderboard" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                <button onclick="switchTab('leaderboard')" id="btn-tab-leaderboard" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer">
                     <i class="fa-solid fa-trophy mr-1 text-amber-500"></i> Clasament
                 </button>
-                <button onclick="switchTab('orders')" id="btn-tab-orders" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                <button onclick="switchTab('orders')" id="btn-tab-orders" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer">
                     <i class="fa-solid fa-boxes-stacked mr-1 text-blue-400"></i> Comenzi
                 </button>
-                <button onclick="switchTab('calculator')" id="btn-tab-calculator" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                <button onclick="switchTab('calculator')" id="btn-tab-calculator" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer">
                     <i class="fa-solid fa-flask mr-1 text-purple-500"></i> Calc. Droguri
                 </button>
-                <button onclick="switchTab('calc_arme')" id="btn-tab-calc-arme" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                <button onclick="switchTab('calc_arme')" id="btn-tab-calc-arme" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer">
                     <i class="fa-solid fa-gun mr-1 text-red-500"></i> Calc. Arme
                 </button>
             </div>
 
             <div class="flex items-center gap-3">
-                <button id="btn-reset" onclick="resetWeeklyData()" class="px-3 py-2 bg-red-950/80 border border-red-800 text-red-300 hover:bg-red-900 text-xs font-bold rounded-lg transition">
+                <button id="btn-reset" onclick="resetWeeklyData()" class="px-3 py-2 bg-red-950/80 border border-red-800 text-red-300 hover:bg-red-900 text-xs font-bold rounded-lg transition cursor-pointer">
                     <i class="fa-solid fa-rotate-right mr-1"></i> Reset
                 </button>
-                <button onclick="logout()" class="px-3 py-2 btn-industrial text-xs font-bold rounded-lg" title="Deconectare">
+                <button onclick="logout()" class="px-3 py-2 btn-industrial text-xs font-bold rounded-lg cursor-pointer" title="Deconectare">
                     <i class="fa-solid fa-power-off"></i>
                 </button>
             </div>
@@ -302,16 +332,16 @@
 
         <!-- MEMBERS TAB -->
         <div id="section-members" class="mt-6">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider">Evidență Activitate Membri</h3>
                 <div class="flex flex-wrap gap-2">
-                    <button id="btn-export-png" onclick="downloadMembersPNG()" class="px-3 py-1.5 bg-[#2a2420] border border-[#6b5545] text-amber-500 hover:text-white hover:bg-[#3d332d] text-xs font-bold rounded-lg shadow-lg transition">
+                    <button id="btn-export-png" onclick="downloadMembersPNG()" class="px-3 py-1.5 bg-[#2a2420] border border-[#6b5545] text-amber-500 hover:text-white hover:bg-[#3d332d] text-xs font-bold rounded-lg shadow-lg transition cursor-pointer">
                         <i class="fa-solid fa-camera mr-1"></i> Salvează Poza
                     </button>
-                    <button id="btn-set-manager" onclick="openManagerModal()" class="px-3 py-1.5 bg-amber-950/80 border border-amber-800 text-amber-300 hover:bg-amber-900 text-xs font-bold rounded-lg shadow-lg transition">
+                    <button id="btn-set-manager" onclick="openManagerModal()" class="px-3 py-1.5 bg-amber-950/80 border border-amber-800 text-amber-300 hover:bg-amber-900 text-xs font-bold rounded-lg shadow-lg transition cursor-pointer">
                         <i class="fa-solid fa-user-shield mr-1"></i> Setează Manager
                     </button>
-                    <button id="btn-add-member" onclick="openAddModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg">
+                    <button id="btn-add-member" onclick="openAddModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg cursor-pointer">
                         <i class="fa-solid fa-user-plus mr-1"></i> Adaugă Membru
                     </button>
                 </div>
@@ -358,9 +388,9 @@
 
         <!-- ORDERS TAB -->
         <div id="section-orders" class="mt-6 hidden">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider">Gestiune Comenzi (Droguri / Arme)</h3>
-                <button onclick="openOrderModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg">
+                <button onclick="openOrderModal()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg shadow-lg cursor-pointer">
                     <i class="fa-solid fa-cart-plus mr-1"></i> Plasează Comandă
                 </button>
             </div>
@@ -391,9 +421,9 @@
                     <input type="number" id="calc-coca-input" value="200" class="w-full px-4 py-3 rounded-lg grunge-input text-xl font-bold text-center text-amber-500 mb-4" oninput="updateCalculator()">
                     <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Șabloane Rapide</p>
                     <div class="grid grid-cols-3 gap-2 mb-6">
-                        <button onclick="setCalcAmount(200)" class="btn-industrial py-2 rounded text-xs font-bold">200</button>
-                        <button onclick="setCalcAmount(400)" class="btn-industrial py-2 rounded text-xs font-bold">400</button>
-                        <button onclick="setCalcAmount(600)" class="btn-industrial py-2 rounded text-xs font-bold">600</button>
+                        <button onclick="setCalcAmount(200)" class="btn-industrial py-2 rounded text-xs font-bold cursor-pointer">200</button>
+                        <button onclick="setCalcAmount(400)" class="btn-industrial py-2 rounded text-xs font-bold cursor-pointer">400</button>
+                        <button onclick="setCalcAmount(600)" class="btn-industrial py-2 rounded text-xs font-bold cursor-pointer">600</button>
                     </div>
                 </div>
                 <div class="w-full md:w-2/3 bg-[#0a0a0c] border border-[#302206] rounded-xl p-6 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] font-mono text-sm overflow-hidden relative" id="calc-receipt"></div>
@@ -436,8 +466,8 @@
             <p id="modal-desc" class="text-sm text-gray-400 mb-4">Descriere</p>
             <div id="modal-inputs" class="space-y-3 mb-6 hidden"></div>
             <div class="flex justify-end gap-3 mt-6">
-                <button id="modal-btn-cancel" onclick="closeModal()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-bold rounded-lg transition hidden">Anulează</button>
-                <button id="modal-btn-confirm" class="px-4 py-2 btn-industrial text-sm font-bold rounded-lg transition">Confirmă</button>
+                <button id="modal-btn-cancel" onclick="closeModal()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-bold rounded-lg transition hidden cursor-pointer">Anulează</button>
+                <button id="modal-btn-confirm" class="px-4 py-2 btn-industrial text-sm font-bold rounded-lg transition cursor-pointer">Confirmă</button>
             </div>
         </div>
     </div>
@@ -500,6 +530,7 @@
                 cnp: cnp,
                 rank: rank,
                 accessCode: newCode,
+                isManager: (rank === 'El Jefe'),
                 actions: []
             };
 
@@ -546,7 +577,7 @@
                 return;
             }
 
-            currentUser = { name: user, role: rank, isElJefe: isElJefe, isCustomManager: isCustomManager };
+            currentUser = { name: user, role: rank, isElJefe: isElJefe, isCustomManager: isCustomManager, accessCode: foundMember.accessCode };
             window.appState.setCurrentUser(currentUser);
             
             document.getElementById('login-screen').classList.add('hidden');
@@ -562,11 +593,11 @@
         }
 
         function logout() {
-            localStorage.removeItem('saints_current_user_v2');
+            localStorage.removeItem('saints_active_code_v4');
             document.getElementById('dashboard-screen').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
             document.getElementById('login-code').value = '';
-            window.appState.setCurrentUser({ name: "", role: "", isElJefe: false, isCustomManager: false });
+            window.appState.setCurrentUser({ name: "", role: "", isElJefe: false, isCustomManager: false, accessCode: "" });
             switchTab('members');
         }
 
@@ -660,8 +691,8 @@
             secCalc.classList.add('hidden');
             if (secCalcArme) secCalcArme.classList.add('hidden');
             
-            const activeClass = "px-4 py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition";
-            const inactiveClass = "px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition";
+            const activeClass = "px-4 py-2 text-xs font-bold rounded-md bg-[#2b3036] text-white transition cursor-pointer";
+            const inactiveClass = "px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition cursor-pointer";
             
             btnMembers.className = inactiveClass;
             btnBoard.className = inactiveClass;
@@ -672,6 +703,7 @@
             if (tab === 'members') {
                 secMembers.classList.remove('hidden');
                 btnMembers.className = activeClass;
+                renderMembers();
             } else if (tab === 'leaderboard') {
                 secBoard.classList.remove('hidden');
                 btnBoard.className = activeClass;
@@ -764,6 +796,258 @@
             document.getElementById('calc-receipt').innerHTML = html;
         }
 
+        // Weapon calculator database
+        const weaponsDB = {
+            "Cuțite (Melee)": {
+                "Knife": { cost: 13000, req: {"Element fixare": 1, "Cauciuc": 1} },
+                "Dagger": { cost: 13000, req: {"Element fixare": 1, "Placaj": 5} }
+            },
+            "Pistoale": {
+                "Pistol": {
+                    cost: 13000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 1},
+                    attachments: { "Încărcător Extins": {"Element fixare": 1, "Oțel": 1, "Arc": 5}, "Amortizor": {"Element fixare": 1, "Oțel": 1, "Cauciuc": 3} }
+                },
+                "Pistol .50": {
+                    cost: 52500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3},
+                    attachments: { "Încărcător Extins": {"Element fixare": 2, "Oțel": 1, "Arc": 5} }
+                }
+            },
+            "Assault & Heavy": {
+                "Micro SMG": {
+                    cost: 39000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3}
+                },
+                "Assault Rifle": {
+                    cost: 58500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 7},
+                    attachments: { "Încărcător Extins": {"Element fixare": 8, "Oțel": 1, "Arc": 8} }
+                }
+            }
+        };
+
+        function initWeaponCalc() {
+            const catSelect = document.getElementById('weap-category');
+            if(!catSelect) return;
+            catSelect.innerHTML = '';
+            for (let cat in weaponsDB) {
+                catSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            }
+            renderWeaponsDropdown();
+        }
+
+        function renderWeaponsDropdown() {
+            const catEl = document.getElementById('weap-category');
+            if(!catEl) return;
+            const cat = catEl.value;
+            const weapSelect = document.getElementById('weap-model');
+            weapSelect.innerHTML = '';
+            if (weaponsDB[cat]) {
+                for (let w in weaponsDB[cat]) {
+                    weapSelect.innerHTML += `<option value="${w}">${w}</option>`;
+                }
+            }
+            renderWeaponAttachments();
+        }
+
+        function renderWeaponAttachments() {
+            const catEl = document.getElementById('weap-category');
+            const weapEl = document.getElementById('weap-model');
+            if(!catEl || !weapEl) return;
+            const cat = catEl.value;
+            const weap = weapEl.value;
+            const attachContainer = document.getElementById('weap-attachments');
+            attachContainer.innerHTML = '';
+            const wData = weaponsDB[cat]?.[weap];
+            if (wData && wData.attachments) {
+                for (let att in wData.attachments) {
+                    attachContainer.innerHTML += `
+                        <label class="flex items-center gap-2 text-gray-300 text-xs cursor-pointer hover:text-white">
+                            <input type="checkbox" value="${att}" class="weap-att-checkbox rounded border-gray-600 bg-gray-800 text-red-500" onchange="updateWeaponCalc()">
+                            ${att}
+                        </label>
+                    `;
+                }
+            } else {
+                attachContainer.innerHTML = '<span class="text-xs text-gray-500 italic">Fără atașamente.</span>';
+            }
+            updateWeaponCalc();
+        }
+
+        function updateWeaponCalc() {
+            const catEl = document.getElementById('weap-category');
+            const weapEl = document.getElementById('weap-model');
+            if(!catEl || !weapEl) return;
+            const cat = catEl.value;
+            const weap = weapEl.value;
+            let qty = parseInt(document.getElementById('weap-qty').value) || 1;
+            if (qty < 1) qty = 1;
+
+            const wData = weaponsDB[cat]?.[weap];
+            if (!wData) return;
+
+            let reqs = {};
+            for (let r in wData.req) {
+                reqs[r] = wData.req[r] * qty;
+            }
+
+            const checkboxes = document.querySelectorAll('.weap-att-checkbox:checked');
+            let selectedAtts = [];
+            checkboxes.forEach(cb => {
+                const attName = cb.value;
+                selectedAtts.push(attName);
+                if (wData.attachments[attName]) {
+                    for (let r in wData.attachments[attName]) {
+                        if (!reqs[r]) reqs[r] = 0;
+                        reqs[r] += wData.attachments[attName][r] * qty;
+                    }
+                }
+            });
+
+            let totalOtelEquivalent = 0;
+            if (reqs["Element fixare"]) totalOtelEquivalent += reqs["Element fixare"] * 2;
+            if (reqs["Cadru"]) totalOtelEquivalent += reqs["Cadru"];
+            if (reqs["Mecanism"]) totalOtelEquivalent += reqs["Mecanism"];
+            if (reqs["Țeavă"]) totalOtelEquivalent += reqs["Țeavă"];
+            if (reqs["Oțel"]) totalOtelEquivalent += reqs["Oțel"];
+            const totalFier = totalOtelEquivalent * 5;
+
+            let html = `
+                <div class="text-center text-gray-500 mb-3 border-b border-gray-800 pb-2 font-bold text-xs">--- DEPARTAMENT ARMAMENT ---</div>
+                <div class="text-center font-bold text-red-500 mb-2 text-sm uppercase tracking-widest">${qty}x ${weap}</div>
+            `;
+            if (selectedAtts.length > 0) {
+                html += `<div class="text-center text-[10px] text-gray-400 mb-3 font-bold uppercase">[ ${selectedAtts.join(' | ')} ]</div>`;
+            }
+            html += `<div class="text-gray-300 ml-2 md:ml-4 space-y-1 mb-3 text-xs">`;
+            for (let r in reqs) {
+                html += `<div>• <span class="text-white font-bold">${reqs[r]}x</span> ${r}</div>`;
+            }
+            html += `</div>`;
+            
+            html += `
+                <div class="text-center text-gray-500 my-3 border-b border-gray-800 pb-2 text-xs">----------------------------------</div>
+                <div class="text-gray-300 ml-2 md:ml-4 space-y-1 text-xs">
+                    <div>• Total Oțel necesar: <span class="text-amber-400 font-bold">${totalOtelEquivalent}</span></div>
+                    <div>• Echivalent Minereu Fier: <span class="text-amber-500 font-bold">${totalFier}</span></div>
+                </div>
+                <div class="text-center mt-4">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Cost Total Producție</div>
+                    <div class="text-xl font-black text-green-500">${(wData.cost * qty).toLocaleString('ro-RO')} $</div>
+                </div>
+            `;
+            const receiptEl = document.getElementById('weap-receipt');
+            if (receiptEl) receiptEl.innerHTML = html;
+        }
+
+        function renderMembers() {
+            const tbody = document.getElementById('members-table-body');
+            tbody.innerHTML = '';
+            const membersList = window.appState.getMembers();
+            
+            membersList.forEach(m => {
+                let totalAct = getTotalActions(m);
+                let actionsSummary = m.actions && m.actions.length > 0 
+                    ? m.actions.map(a => `<span class="bg-black/50 px-2 py-0.5 rounded text-[10px] mr-1 border border-gray-800">${a.actionName}: <b class="text-amber-400">${a.count}</b></span>`).join('')
+                    : '<span class="text-gray-500 italic text-xs">Nicio acțiune înregistrată</span>';
+
+                let canEdit = currentUser.isElJefe || currentUser.name === m.name;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-white/5 transition border-t border-gray-800/50">
+                        <td class="py-3 px-4 font-bold text-gray-200">${m.name} <span class="text-[10px] text-gray-500 font-mono font-normal">(${m.cnp})</span></td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#2b3036] text-amber-400 border border-gray-700">${m.rank}</span>
+                            ${m.isManager ? '<span class="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-amber-950 text-amber-300 border border-amber-800">MANAGER</span>' : ''}
+                        </td>
+                        <td class="py-3 px-4 flex flex-wrap gap-1 items-center">${actionsSummary}</td>
+                        <td class="py-3 px-4 text-center font-black text-green-400 text-sm">${totalAct}</td>
+                        <td class="py-3 px-4 text-right">
+                            ${canEdit ? `<button onclick="openAddActionModal('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs transition mr-1 cursor-pointer" title="Adaugă Acțiune"><i class="fa-solid fa-plus"></i></button>` : ''}
+                            ${currentUser.isElJefe ? `<button onclick="deleteMember('${m.id}')" class="px-2 py-1 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-xs transition cursor-pointer" title="Șterge Membru"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openAddModal() {
+            showModal({
+                title: 'Adaugă Membru Nou',
+                message: 'Introdu datele noului membru în gang.',
+                type: 'prompt',
+                inputs: [
+                    { id: 'name', label: 'Nume IC', required: true },
+                    { id: 'cnp', label: 'CNP / ID Joc', type: 'number', required: true },
+                    { id: 'rank', label: 'Grad Gang', type: 'select', options: ['El Jefe', 'Right Hand', 'Consilier OG', 'Matroană', 'Veteran', 'Associate', 'Dealer'] }
+                ],
+                onConfirm: async (vals) => {
+                    const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+                    await window.dbRef.addMember({
+                        name: vals.name,
+                        cnp: vals.cnp,
+                        rank: vals.rank,
+                        accessCode: `SAINTS-${randomStr}`,
+                        isManager: vals.rank === 'El Jefe',
+                        actions: []
+                    });
+                }
+            });
+        }
+
+        function openAddActionModal(id) {
+            showModal({
+                title: 'Înregistrează Acțiune / Activitate',
+                message: 'Introdu numele acțiunii (ex: Trafic Arms, Bank Job) și numărul.',
+                type: 'prompt',
+                inputs: [
+                    { id: 'actionName', label: 'Nume Acțiune', value: 'Trafic Arms', required: true },
+                    { id: 'count', label: 'Cantitate / Număr', type: 'number', value: '1', required: true }
+                ],
+                onConfirm: async (vals) => {
+                    const membersList = window.appState.getMembers();
+                    const m = membersList.find(item => item.id == id);
+                    if (m) {
+                        let acts = m.actions ? [...m.actions] : [];
+                        const existing = acts.find(a => a.actionName.toLowerCase() === vals.actionName.toLowerCase());
+                        if (existing) {
+                            existing.count += parseInt(vals.count) || 1;
+                        } else {
+                            acts.push({ actionName: vals.actionName, count: parseInt(vals.count) || 1 });
+                        }
+                        await window.dbRef.updateMember(id, { actions: acts });
+                    }
+                }
+            });
+        }
+
+        function deleteMember(id) {
+            showModal({
+                title: 'Confirmare Ștergere',
+                message: 'Sigur dorești să ștergi acest membru din evidență?',
+                onConfirm: async () => {
+                    await window.dbRef.deleteMemberDoc(id);
+                }
+            });
+        }
+
+        function renderLeaderboard() {
+            const membersList = window.appState.getMembers();
+            const sorted = [...membersList].sort((a, b) => getTotalActions(b) - getTotalActions(a));
+            
+            const tbody = document.getElementById('leaderboard-table-body');
+            tbody.innerHTML = '';
+
+            sorted.forEach((m, idx) => {
+                let badgeColor = idx === 0 ? 'text-amber-400 font-black' : (idx === 1 ? 'text-gray-300 font-bold' : (idx === 2 ? 'text-amber-600 font-bold' : 'text-gray-500'));
+                tbody.innerHTML += `
+                    <tr class="hover:bg-white/5 transition border-t border-gray-800/50">
+                        <td class="py-3 px-4 text-center font-mono ${badgeColor}">#${idx + 1}</td>
+                        <td class="py-3 px-4 font-bold text-gray-200">${m.name}</td>
+                        <td class="py-3 px-4 text-gray-400">${m.rank}</td>
+                        <td class="py-3 px-4 text-right font-black text-green-400">${getTotalActions(m)}</td>
+                    </tr>
+                `;
+            });
+        }
+
         function renderOrders() {
             const tbody = document.getElementById('orders-table-body');
             tbody.innerHTML = '';
@@ -792,7 +1076,7 @@
                         <td class="py-3 px-4 text-gray-300 font-medium">${o.details}</td>
                         <td class="py-3 px-4 text-center text-amber-400 font-bold text-sm max-w-[200px] break-words">${o.quantity}</td>
                         <td class="py-3 px-4 text-right">
-                            <button onclick="completeOrder('${o.id}')" class="px-2 py-1 bg-green-900/30 border border-green-800 text-green-400 hover:bg-green-800 hover:text-white rounded text-xs transition" title="Marchează Livrată">
+                            <button onclick="completeOrder('${o.id}')" class="px-2 py-1 bg-green-900/30 border border-green-800 text-green-400 hover:bg-green-800 hover:text-white rounded text-xs transition cursor-pointer" title="Marchează Livrată">
                                 <i class="fa-solid fa-check mr-1"></i> Livrat
                             </button>
                         </td>
@@ -886,406 +1170,102 @@
                     const phone = document.getElementById('order-phone').value || 'N/A';
                     let details = '';
                     let qtyDisplay = '';
-                    
+
                     if (cat === 'Droguri') {
-                        const sodiu = document.getElementById('order-sodiu').value || 0;
-                        const amoniac = document.getElementById('order-amoniac').value || 0;
-                        const plicuri = document.getElementById('order-plicuri').value || 0;
+                        const amoniac = document.getElementById('order-amoniac').value || '0';
+                        const sodiu = document.getElementById('order-sodiu').value || '0';
+                        const plicuri = document.getElementById('order-plicuri').value || '0';
                         details = `Ingrediente Preparare`;
                         qtyDisplay = `${amoniac} amoniac + ${sodiu} sodiu + ${plicuri} plicuri`;
                     } else if (cat === 'Arme') {
-                        const weapon = document.getElementById('order-weapon').value;
-                        const ammo = document.getElementById('order-ammo').value || 0;
-                        details = `Armă: ${weapon}`;
-                        qtyDisplay = `1x armă + ${ammo} gloanțe`;
-                    } else if (cat === 'Consumabile') {
+                        const weap = document.getElementById('order-weapon').value;
+                        const ammo = document.getElementById('order-ammo').value || '0';
+                        details = `Armă: ${weap}`;
+                        qtyDisplay = `${ammo} gloanțe`;
+                    } else {
                         const cons = document.getElementById('order-consumable').value;
-                        const qty = document.getElementById('order-cons-qty').value || 0;
-                        details = `Echipament: ${cons}`;
+                        const qty = document.getElementById('order-cons-qty').value || '1';
+                        details = `Consumabil: ${cons}`;
                         qtyDisplay = `${qty} bucăți`;
                     }
 
                     await window.dbRef.addOrder({
                         category: `Comenzi ${cat}`,
-                        name: name,
-                        cnp: cnp,
-                        phone: phone,
-                        details: details,
-                        quantity: qtyDisplay
+                        name, cnp, phone, details, quantity: qtyDisplay
                     });
                     closeModal();
                 }
             });
         }
 
-        function completeOrder(id) {
-            showModal({
-                title: 'Confirmare Livrare',
-                message: 'Ești sigur că această comandă a fost predată și banii au fost încasați?',
-                type: 'confirm',
-                onConfirm: async () => {
-                    await window.dbRef.deleteOrderDoc(id);
-                }
-            });
+        async function completeOrder(id) {
+            await window.dbRef.deleteOrderDoc(id);
         }
 
-        function renderMembers() {
-            const tbody = document.getElementById('members-table-body');
-            tbody.innerHTML = '';
-
-            const membersList = window.appState.getMembers();
-            if (membersList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-gray-500 italic text-sm">Niciun membru nu a fost adăugat încă.</td></tr>`;
+        function resetWeeklyData() {
+            if (!currentUser.isElJefe) {
+                showModal({ title: 'Acces Refuzat', message: 'Doar liderul (El Jefe) poate reseta activitatea!', type: 'alert' });
                 return;
             }
-
-            const currentUser = window.appState.getCurrentUser();
-            const managementRanks = ['Right Hand', 'Consilier OG', 'El Jefe'];
-            const canManage = currentUser.isElJefe || managementRanks.includes(currentUser.role) || currentUser.isCustomManager;
-
-            const btnAdd = document.getElementById('btn-add-member');
-            const btnManager = document.getElementById('btn-set-manager');
-            const btnReset = document.getElementById('btn-reset');
-            if (btnAdd) btnAdd.style.display = canManage ? 'inline-block' : 'none';
-            if (btnManager) btnManager.style.display = currentUser.isElJefe ? 'inline-block' : 'none';
-            if (btnReset) btnReset.style.display = canManage ? 'inline-block' : 'none';
-
-            membersList.forEach(m => {
-                const totalActions = getTotalActions(m);
-                let actionsHTML = '<span class="text-gray-600">-</span>';
-                if (m.actions && m.actions.length > 0) {
-                    actionsHTML = '<div class="flex flex-wrap gap-2">' + 
-                        m.actions.map(a => `<span class="bg-black/50 px-2 py-1 rounded text-[10.5px] font-mono tracking-wide uppercase text-amber-500 border border-amber-900/40">${a.actionName}: <span class="text-white">${a.count}</span></span>`).join('') +
-                        '</div>';
+            showModal({
+                title: 'Resetare Săptămânală',
+                message: 'Sigur dorești să resetezi toate acțiunile membrilor la 0?',
+                onConfirm: async () => {
+                    members.forEach(m => m.actions = []);
+                    saveToStorage();
+                    renderMembers();
+                    renderLeaderboard();
                 }
-
-                let memberInfo = `<div class="font-semibold text-gray-100">${m.name}</div>`;
-                if (m.cnp) {
-                    memberInfo += `<div class="text-[10px] text-gray-400 mt-0.5">CNP (ID): ${m.cnp} ${m.isManager ? '<span class="text-amber-400 font-bold ml-1">[MANAGER]</span>' : ''}</div>`;
-                }
-                if (m.accessCode && (canManage || currentUser.name === m.name)) {
-                    memberInfo += `<div class="text-[10px] text-amber-500 font-mono mt-1 bg-black/40 inline-block px-1.5 py-0.5 rounded border border-[#6b5545]"><i class="fa-solid fa-key mr-1"></i>${m.accessCode}</div>`;
-                }
-
-                let actionButtonsHTML = '';
-                if (canManage) {
-                    actionButtonsHTML = `
-                        <button onclick="logAction('${m.id}')" class="text-xs text-gray-400 hover:text-green-400 mr-2" title="Adaugă Acțiune"><i class="fa-solid fa-plus"></i></button>
-                        <button onclick="deleteMember('${m.id}')" class="text-xs text-gray-400 hover:text-red-400" title="Șterge Membru"><i class="fa-solid fa-trash"></i></button>
-                    `;
-                } else {
-                    actionButtonsHTML = `<span class="text-xs text-gray-600 italic">Doar vizualizare</span>`;
-                }
-
-                tbody.innerHTML += `
-                    <tr class="hover:bg-white/5 transition border-t border-gray-800/50">
-                        <td class="py-3 px-4">${memberInfo}</td>
-                        <td class="py-3 px-4 text-xs text-amber-500 font-bold uppercase">${m.rank}</td>
-                        <td class="py-3 px-4 max-w-xs">${actionsHTML}</td>
-                        <td class="py-3 px-4 text-center font-bold text-amber-400 text-lg">${totalActions}</td>
-                        <td class="py-3 px-4 text-right action-col">${actionButtonsHTML}</td>
-                    </tr>
-                `;
             });
         }
 
         function openManagerModal() {
-            showModal({
-                title: 'Setare Manager Extra prin CNP',
-                message: 'Introdu ID-ul (CNP) al membrului căruia dorești să îi acorzi drepturi de modificare.',
-                type: 'prompt',
-                inputs: [
-                    { id: 'managerCnp', label: 'CNP Membru', type: 'number', required: true }
-                ],
-                onConfirm: async (vals) => {
-                    const cnpTarget = vals.managerCnp.trim();
-                    const membersList = window.appState.getMembers();
-                    const member = membersList.find(m => String(m.cnp) === cnpTarget);
-                    
-                    if (!member) {
-                        showModal({ title: 'Eroare', message: `Niciun membru cu CNP ${cnpTarget}!`, type: 'alert' });
-                        return;
-                    }
-
-                    await window.dbRef.updateMember(member.id, { isManager: true });
-                    showModal({ title: 'Succes!', message: `${member.name} este acum manager.`, type: 'alert' });
-                }
-            });
-        }
-
-        function renderLeaderboard() {
-            const membersList = window.appState.getMembers();
-            if (membersList.length === 0) {
-                document.getElementById('podium-container').innerHTML = '';
-                document.getElementById('leaderboard-table-body').innerHTML = `<tr><td colspan="4" class="py-6 text-center text-gray-500 italic">Nu există date.</td></tr>`;
+            if (!currentUser.isElJefe) {
+                showModal({ title: 'Acces Refuzat', message: 'Doar El Jefe poate acorda permisiuni de manager!', type: 'alert' });
                 return;
             }
-
-            const sorted = [...membersList].sort((a, b) => getTotalActions(b) - getTotalActions(a));
-            const podium = document.getElementById('podium-container');
-            podium.innerHTML = '';
-
-            if (sorted[1] && getTotalActions(sorted[1]) > 0) podium.innerHTML += createPodiumCard(sorted[1], 2, 'border-gray-500 text-gray-300', 'Locul 2');
-            if (sorted[0] && getTotalActions(sorted[0]) > 0) podium.innerHTML += createPodiumCard(sorted[0], 1, 'border-amber-500 text-amber-400 scale-105', 'Locul 1 👑');
-            if (sorted[2] && getTotalActions(sorted[2]) > 0) podium.innerHTML += createPodiumCard(sorted[2], 3, 'border-[#8c6d53] text-[#8c6d53]', 'Locul 3');
-
-            const tbody = document.getElementById('leaderboard-table-body');
-            tbody.innerHTML = '';
-            sorted.forEach((m, idx) => {
-                tbody.innerHTML += `
-                    <tr class="hover:bg-white/5 border-t border-gray-800/50">
-                        <td class="py-3 px-4 text-center font-bold text-gray-500">#${idx + 1}</td>
-                        <td class="py-3 px-4 font-semibold text-gray-100">${m.name}</td>
-                        <td class="py-3 px-4 text-xs text-gray-400">${m.rank}</td>
-                        <td class="py-3 px-4 text-right font-bold text-amber-400">${getTotalActions(m)} Acțiuni</td>
-                    </tr>
-                `;
-            });
-        }
-
-        function createPodiumCard(m, pos, colorClass, label) {
-            return `
-                <div class="bg-[#121418] border-2 ${colorClass} rounded-xl p-4 text-center shadow-2xl flex flex-col items-center">
-                    <span class="text-[10px] font-bold uppercase tracking-widest mb-2 bg-black/50 px-2 py-1 rounded">${label}</span>
-                    <h4 class="text-xl font-black text-white">${m.name}</h4>
-                    <p class="text-xs text-gray-400 mt-1 uppercase">${m.rank}</p>
-                    <div class="mt-4 px-4 py-1.5 bg-black/60 rounded-lg text-sm font-bold border border-white/10">
-                        ${getTotalActions(m)} Acțiuni
-                    </div>
+            let membersList = window.appState.getMembers();
+            let optionsHTML = membersList.map(m => `<option value="${m.id}">${m.name} (${m.rank})</option>`).join('');
+            let html = `
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Selectează Membru</label>
+                    <select id="mgr-member-id" class="w-full px-3 py-2 rounded-lg grunge-input text-sm mb-3 cursor-pointer">${optionsHTML}</select>
                 </div>
             `;
-        }
-
-        function logAction(id) {
-            const membersList = window.appState.getMembers();
-            const m = membersList.find(item => item.id == id);
-            if (!m) return;
-
             showModal({
-                title: `Adaugă Acțiune: ${m.name}`,
-                message: 'Notează acțiunea și participările.',
-                type: 'prompt',
-                inputs: [
-                    { id: 'actionName', label: 'Nume Acțiune', type: 'text', required: true },
-                    { id: 'actionCount', label: 'Număr', type: 'number', value: 1 }
-                ],
-                onConfirm: async (vals) => {
-                    const count = parseInt(vals.actionCount) || 1;
-                    const actionName = vals.actionName.trim();
-                    let actionsArr = m.actions ? [...m.actions] : [];
-                    const existing = actionsArr.find(a => a.actionName.toLowerCase() === actionName.toLowerCase());
-                    if (existing) {
-                        existing.count += count;
-                    } else {
-                        actionsArr.push({ actionName, count });
+                title: 'Setare Manager / Drepturi',
+                message: 'Acordă drepturi de gestionare membrului selectat.',
+                customHTML: html,
+                onConfirmCustom: async () => {
+                    const mId = document.getElementById('mgr-member-id').value;
+                    let target = members.find(item => item.id === mId);
+                    if (target) {
+                        target.isManager = !target.isManager;
+                        saveToStorage();
+                        renderMembers();
                     }
-                    await window.dbRef.updateMember(m.id, { actions: actionsArr });
-                }
-            });
-        }
-
-        function deleteMember(id) {
-            const membersList = window.appState.getMembers();
-            const m = membersList.find(item => item.id == id);
-            if (!m) return;
-            showModal({
-                title: 'Ștergere Membru',
-                message: `Ești sigur că vrei să elimini pe ${m.name}?`,
-                type: 'confirm',
-                onConfirm: async () => {
-                    await window.dbRef.deleteMemberDoc(id);
-                }
-            });
-        }
-
-        function openAddModal() {
-            showModal({
-                title: 'Adaugă Membru Nou',
-                message: 'Introdu datele IC ale noului membru.',
-                type: 'prompt',
-                inputs: [
-                    { id: 'name', label: 'Nume IC', required: true },
-                    { id: 'cnp', label: 'ID Joc (CNP)', type: 'number', required: true },
-                    { id: 'rank', label: 'Grad Gang', type: 'select', options: ['El Jefe', 'Right Hand', 'Consilier OG', 'Matroană', 'Veteran', 'Associate', 'Dealer'] }
-                ],
-                onConfirm: async (vals) => {
-                    const newCode = `SAINTS-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-                    await window.dbRef.addMember({
-                        name: vals.name,
-                        cnp: vals.cnp,
-                        rank: vals.rank || "Associate",
-                        accessCode: newCode,
-                        actions: []
-                    });
-                    showModal({ title: 'Membru Adăugat!', message: `Cod acces: ${newCode}`, type: 'alert' });
-                }
-            });
-        }
-
-        function resetWeeklyData() {
-            showModal({
-                title: 'Resetare Activitate',
-                message: 'Resetezi istoricul la zero pentru toți membrii?',
-                type: 'confirm',
-                onConfirm: async () => {
-                    const membersList = window.appState.getMembers();
-                    for (let m of membersList) {
-                        await window.dbRef.updateMember(m.id, { actions: [] });
-                    }
-                    showModal({ title: 'Succes', message: 'Datele au fost resetate.', type: 'alert' });
+                    closeModal();
                 }
             });
         }
 
         function downloadMembersPNG() {
-            const wrapper = document.getElementById('members-table-wrapper');
             const titleEl = document.getElementById('png-title');
             const dateEl = document.getElementById('png-date');
             dateEl.innerText = new Date().toLocaleDateString('ro-RO');
             titleEl.classList.remove('hidden');
-            const actionCols = document.querySelectorAll('.action-col');
-            actionCols.forEach(col => col.style.display = 'none');
 
-            setTimeout(() => {
-                html2canvas(wrapper, { backgroundColor: '#121418', scale: 2 }).then(canvas => {
-                    titleEl.classList.add('hidden');
-                    actionCols.forEach(col => col.style.display = '');
-                    const link = document.createElement('a');
-                    link.download = `Evidenta_Saints.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                });
-            }, 100);
-        }
-
-        const weaponsDB = {
-            "Cuțite (Melee)": {
-                "Knife": { cost: 13000, req: {"Element fixare": 1, "Cauciuc": 1} },
-                "Dagger": { cost: 13000, req: {"Element fixare": 1, "Placaj": 5} }
-            },
-            "Pistoale": {
-                "Pistol": {
-                    cost: 13000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 1},
-                    attachments: { "Încărcător Extins": {"Element fixare": 1, "Oțel": 1, "Arc": 5}, "Amortizor": {"Element fixare": 1, "Oțel": 1, "Cauciuc": 3} }
-                },
-                "Pistol .50": {
-                    cost: 52500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3},
-                    attachments: { "Încărcător Extins": {"Element fixare": 2, "Oțel": 1, "Arc": 5} }
-                }
-            },
-            "Assault & Heavy": {
-                "Micro SMG": {
-                    cost: 39000, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 3}
-                },
-                "Assault Rifle": {
-                    cost: 58500, req: {"Țeavă": 1, "Cadru": 1, "Mecanism": 1, "Element fixare": 7},
-                    attachments: { "Încărcător Extins": {"Element fixare": 8, "Oțel": 1, "Arc": 8} }
-                }
-            }
-        };
-
-        function initWeaponCalc() {
-            const catSelect = document.getElementById('weap-category');
-            catSelect.innerHTML = '';
-            for (let cat in weaponsDB) {
-                catSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
-            }
-            renderWeaponsDropdown();
-        }
-
-        function renderWeaponsDropdown() {
-            const cat = document.getElementById('weap-category').value;
-            const weapSelect = document.getElementById('weap-model');
-            weapSelect.innerHTML = '';
-            if (weaponsDB[cat]) {
-                for (let w in weaponsDB[cat]) {
-                    weapSelect.innerHTML += `<option value="${w}">${w}</option>`;
-                }
-            }
-            renderWeaponAttachments();
-        }
-
-        function renderWeaponAttachments() {
-            const cat = document.getElementById('weap-category').value;
-            const weap = document.getElementById('weap-model').value;
-            const attachContainer = document.getElementById('weap-attachments');
-            attachContainer.innerHTML = '';
-            const wData = weaponsDB[cat]?.[weap];
-            if (wData && wData.attachments) {
-                for (let att in wData.attachments) {
-                    attachContainer.innerHTML += `
-                        <label class="flex items-center gap-2 text-gray-300 text-xs cursor-pointer hover:text-white">
-                            <input type="checkbox" value="${att}" class="weap-att-checkbox rounded border-gray-600 bg-gray-800 text-red-500" onchange="updateWeaponCalc()">
-                            ${att}
-                        </label>
-                    `;
-                }
-            } else {
-                attachContainer.innerHTML = '<span class="text-xs text-gray-500 italic">Fără atașamente.</span>';
-            }
-            updateWeaponCalc();
-        }
-
-        function updateWeaponCalc() {
-            const cat = document.getElementById('weap-category').value;
-            const weap = document.getElementById('weap-model').value;
-            let qty = parseInt(document.getElementById('weap-qty').value) || 1;
-            if (qty < 1) qty = 1;
-
-            const wData = weaponsDB[cat]?.[weap];
-            if (!wData) return;
-
-            let reqs = {};
-            for (let r in wData.req) {
-                reqs[r] = wData.req[r] * qty;
-            }
-
-            const checkboxes = document.querySelectorAll('.weap-att-checkbox:checked');
-            let selectedAtts = [];
-            checkboxes.forEach(cb => {
-                const attName = cb.value;
-                selectedAtts.push(attName);
-                if (wData.attachments[attName]) {
-                    for (let r in wData.attachments[attName]) {
-                        if (!reqs[r]) reqs[r] = 0;
-                        reqs[r] += wData.attachments[attName][r] * qty;
-                    }
-                }
+            const tableWrapper = document.getElementById('members-table-wrapper');
+            html2canvas(tableWrapper, { backgroundColor: '#121418', scale: 2 }).then(canvas => {
+                titleEl.classList.add('hidden');
+                const link = document.createElement('a');
+                link.download = `Saints_Evidenta_${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }).catch(err => {
+                titleEl.classList.add('hidden');
+                console.error("PNG export error:", err);
             });
-
-            let totalOtelEquivalent = 0;
-            if (reqs["Element fixare"]) totalOtelEquivalent += reqs["Element fixare"] * 2;
-            if (reqs["Cadru"]) totalOtelEquivalent += reqs["Cadru"];
-            if (reqs["Mecanism"]) totalOtelEquivalent += reqs["Mecanism"];
-            if (reqs["Țeavă"]) totalOtelEquivalent += reqs["Țeavă"];
-            if (reqs["Oțel"]) totalOtelEquivalent += reqs["Oțel"];
-            const totalFier = totalOtelEquivalent * 5;
-
-            let html = `
-                <div class="text-center text-gray-600 mb-4 border-b border-[#4a1c1c] pb-2 font-bold">--- DEPARTAMENT ARMAMENT ---</div>
-                <div class="text-center font-bold text-red-500 mb-2 text-base uppercase tracking-widest">${qty}x ${weap}</div>
-            `;
-            if (selectedAtts.length > 0) {
-                html += `<div class="text-center text-[10px] text-gray-400 mb-4 font-bold uppercase">[ ${selectedAtts.join(' | ')} ]</div>`;
-            }
-            html += `<div class="text-gray-300 ml-2 md:ml-8 space-y-1 mb-4">`;
-            for (let r in reqs) {
-                html += `<div>• <span class="text-white font-bold">${reqs[r]}x</span> ${r}</div>`;
-            }
-            html += `</div>`;
-            
-            html += `
-                <div class="text-center text-gray-600 my-4 border-b border-[#4a1c1c] pb-2">----------------------------------</div>
-                <div class="text-gray-300 ml-2 md:ml-8 space-y-1">
-                    <div>• Total Oțel necesar: <span class="text-amber-400 font-bold">${totalOtelEquivalent}</span></div>
-                    <div>• Echivalent Minereu Fier: <span class="text-amber-500 font-bold">${totalFier}</span></div>
-                </div>
-                <div class="text-center mt-4">
-                    <div class="text-xs text-gray-400 uppercase tracking-widest mb-1">Cost Total Producție</div>
-                    <div class="text-2xl font-black text-green-500">${(wData.cost * qty).toLocaleString('ro-RO')} $ Murdari</div>
-                </div>
-            `;
-            document.getElementById('weap-receipt').innerHTML = html;
         }
     </script>
 </body>
