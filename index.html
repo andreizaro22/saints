@@ -745,9 +745,35 @@
             members.forEach(m => { 
                 const total = getTotalActions(m); 
                 let actionsHTML = m.actions?.map(a => `<span class="bg-black/50 px-2 py-1 rounded text-[10px] border border-amber-900/40 text-amber-500">${a.actionName}: <span class="text-white">${a.count}</span></span>`).join(' ') || '-'; 
-                let btns = canManage ? ` <button onclick="logAction('${m.id}')" class="px-2 py-1 bg-green-950/60 border border-green-800 text-green-400 hover:bg-green-900 rounded text-xs mr-1" title="Adaugă acțiune"><i class="fa-solid fa-plus"></i></button> <button onclick="reduceAction('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs mr-2" title="Scade acțiune"><i class="fa-solid fa-minus"></i></button> <button onclick="deleteMember('${m.id}')" class="px-2 py-1 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-xs" title="Șterge membru"><i class="fa-solid fa-trash"></i></button> ` : `<span class="text-xs text-gray-600">Vizualizare</span>`; 
+                let btns = canManage ? ` 
+                    <button onclick="logAction('${m.id}')" class="px-2 py-1 bg-green-950/60 border border-green-800 text-green-400 hover:bg-green-900 rounded text-xs mr-1" title="Adaugă acțiune"><i class="fa-solid fa-plus"></i></button> 
+                    <button onclick="reduceAction('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs mr-1" title="Scade acțiune"><i class="fa-solid fa-minus"></i></button> 
+                    <button onclick="changeRank('${m.id}')" class="px-2 py-1 bg-blue-950/60 border border-blue-800 text-blue-400 hover:bg-blue-900 rounded text-xs mr-1" title="Schimbă Grad"><i class="fa-solid fa-user-tag"></i></button> 
+                    <button onclick="deleteMember('${m.id}')" class="px-2 py-1 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-xs" title="Șterge membru"><i class="fa-solid fa-trash"></i></button> 
+                ` : `<span class="text-xs text-gray-600">Vizualizare</span>`; 
                 tbody.innerHTML += ` <tr class="hover:bg-white/5 border-t border-gray-800/50"> <td class="py-3 px-4 font-semibold">${m.name} <div class="text-[10px] text-gray-500">ID: ${m.cnp} ${m.isManager ? '[MANAGER]' : ''}</div></td> <td class="py-3 px-4 text-xs text-amber-500 font-bold">${m.rank}</td> <td class="py-3 px-4">${actionsHTML}</td> <td class="py-3 px-4 text-center font-bold text-amber-400">${total}</td> <td class="py-3 px-4 text-right">${btns}</td> </tr> `; 
             }); 
+        }
+
+        function changeRank(id) {
+            const m = members.find(item => item.id == id);
+            if (!m) return;
+            showModal({
+                title: `Schimbă Grad (${m.name})`,
+                type: 'prompt',
+                inputs: [
+                    { 
+                        id: 'r', 
+                        label: 'Alege noul grad', 
+                        type: 'select', 
+                        value: m.rank,
+                        options: ['Associate', 'Dealer', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] 
+                    }
+                ],
+                onConfirm: async (v) => {
+                    await window.dbRef.updateMember(id, { rank: v.r });
+                }
+            });
         }
 
         // FUNCTIE EXPORT RAPORT CA IMAGINE PNG
@@ -890,7 +916,36 @@
         function openAddModal() { showModal({ title: 'Membru Nou', type: 'prompt', inputs: [ { id: 'n', label: 'Nume IC' }, { id: 'c', label: 'CNP' }, { id: 'r', label: 'Grad', type: 'select', options: ['Associate', 'Dealer', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] }, { id: 'p', label: 'Cod', value: '1122' } ], onConfirm: async (v) => await window.dbRef.addMember({ name: v.n, cnp: v.c, rank: v.r, pass: v.p, actions: [] }) }); }
         function resetWeeklyData() { showModal({ title: 'Reset Săptămânal', message: 'Resetat toate acțiunile la zero?', type: 'confirm', onConfirm: async () => { for (let m of members) await window.dbRef.updateMember(m.id, { actions: [] }); } }); }
         function openManagerModal() { showModal({ title: 'Setează Manager', type: 'prompt', inputs: [{ id: 'c', label: 'CNP Membru' }], onConfirm: async (v) => { const m = members.find(x => x.cnp === v.c); if(m) await window.dbRef.updateMember(m.id, { isManager: true }); } }); }
-        function showModal(opt) { document.getElementById('custom-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = opt.title; document.getElementById('modal-desc').innerText = opt.message || ''; const inp = document.getElementById('modal-inputs'); inp.innerHTML = ''; if (opt.type === 'prompt') { inp.classList.remove('hidden'); opt.inputs.forEach(i => { if (i.type==='select') inp.innerHTML += `<div><label class="text-xs text-gray-400 mb-1 block">${i.label}</label><select id="mi-${i.id}" class="w-full px-2 py-1.5 rounded grunge-input text-sm">${i.options.map(o=>`<option>${o}</option>`).join('')}</select></div>`; else inp.innerHTML += `<div><label class="text-xs text-gray-400 mb-1 block">${i.label}</label><input type="${i.type||'text'}" id="mi-${i.id}" value="${i.value||''}" class="w-full px-2 py-1.5 rounded grunge-input text-sm"></div>`; }); } else inp.classList.add('hidden'); document.getElementById('modal-btn-cancel').classList.toggle('hidden', opt.type === 'alert'); document.getElementById('modal-btn-confirm').onclick = () => { if(opt.type==='prompt'){ let v={}; opt.inputs.forEach(i=>v[i.id]=document.getElementById(`mi-${i.id}`).value); closeModal(); opt.onConfirm(v); } else { closeModal(); if(opt.onConfirm) opt.onConfirm(); } }; }
+        
+        function showModal(opt) { 
+            document.getElementById('custom-modal').classList.remove('hidden'); 
+            document.getElementById('modal-title').innerText = opt.title; 
+            document.getElementById('modal-desc').innerText = opt.message || ''; 
+            const inp = document.getElementById('modal-inputs'); 
+            inp.innerHTML = ''; 
+            if (opt.type === 'prompt') { 
+                inp.classList.remove('hidden'); 
+                opt.inputs.forEach(i => { 
+                    if (i.type==='select') {
+                        inp.innerHTML += `<div><label class="text-xs text-gray-400 mb-1 block">${i.label}</label><select id="mi-${i.id}" class="w-full px-2 py-1.5 rounded grunge-input text-sm">${i.options.map(o=>`<option ${o===i.value?'selected':''}>${o}</option>`).join('')}</select></div>`;
+                    } else {
+                        inp.innerHTML += `<div><label class="text-xs text-gray-400 mb-1 block">${i.label}</label><input type="${i.type||'text'}" id="mi-${i.id}" value="${i.value||''}" class="w-full px-2 py-1.5 rounded grunge-input text-sm"></div>`; 
+                    }
+                }); 
+            } else inp.classList.add('hidden'); 
+            document.getElementById('modal-btn-cancel').classList.toggle('hidden', opt.type === 'alert'); 
+            document.getElementById('modal-btn-confirm').onclick = () => { 
+                if(opt.type==='prompt'){ 
+                    let v={}; 
+                    opt.inputs.forEach(i=>v[i.id]=document.getElementById(`mi-${i.id}`).value); 
+                    closeModal(); 
+                    opt.onConfirm(v); 
+                } else { 
+                    closeModal(); 
+                    if(opt.onConfirm) opt.onConfirm(); 
+                } 
+            }; 
+        }
         function closeModal() { document.getElementById('custom-modal').classList.add('hidden'); }
 
         // SISTEM COMENZI MULTI-PRODUCT
