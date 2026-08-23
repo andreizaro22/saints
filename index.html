@@ -63,6 +63,7 @@
 
         let members = [];
         let orders = [];
+        let chatMessages = [];
         let currentUser = { name: "", role: "", isElJefe: false, isCustomManager: false };
         let currentOrderDraftItems = []; 
 
@@ -103,6 +104,7 @@
                 if (result.record) {
                     members = result.record.members || defaultMembers;
                     orders = result.record.orders || [];
+                    chatMessages = result.record.chatMessages || [];
                 }
             } catch(e) {
                 console.error("Eroare la citire cloud:", e);
@@ -118,7 +120,7 @@
                         'Content-Type': 'application/json',
                         'X-Master-Key': API_KEY
                     },
-                    body: JSON.stringify({ members: members, orders: orders })
+                    body: JSON.stringify({ members: members, orders: orders, chatMessages: chatMessages })
                 });
             } catch(e) {
                 console.error("Eroare la salvare cloud:", e);
@@ -326,11 +328,17 @@
                 <button onclick="switchTab('drugs')" id="btn-tab-drugs" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
                     <i class="fa-solid fa-pills mr-1 text-green-400"></i> Droguri
                 </button>
+                <button onclick="switchTab('chat')" id="btn-tab-chat" class="px-4 py-2 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">
+                    <i class="fa-solid fa-comments mr-1 text-purple-400"></i> Chat Membri
+                </button>
             </div>
 
             <div class="flex items-center gap-3">
                 <button id="btn-reset" onclick="resetWeeklyData()" class="px-3 py-2 bg-red-950/80 border border-red-800 text-red-300 hover:bg-red-900 text-xs font-bold rounded-lg transition">
                     <i class="fa-solid fa-rotate-right mr-1"></i> Reset
+                </button>
+                <button onclick="openChangePasswordModal()" class="px-3 py-2 btn-industrial text-xs font-bold rounded-lg" title="Schimbă codul">
+                    <i class="fa-solid fa-key"></i>
                 </button>
                 <button onclick="logout()" class="px-3 py-2 btn-industrial text-xs font-bold rounded-lg" title="Deconectare">
                     <i class="fa-solid fa-power-off"></i>
@@ -621,6 +629,41 @@
             </div>
         </div>
 
+        <!-- CHAT MEMBRI -->
+        <div id="section-chat" class="mt-6 hidden">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-2">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider"><i class="fa-solid fa-comments text-purple-400 mr-2"></i>Chat Membri</h3>
+                    <p class="text-xs text-gray-500">Doar membrii autentificați pot vedea și trimite mesaje.</p>
+                </div>
+                <button onclick="renderChat()" class="px-3 py-1.5 btn-industrial text-xs font-bold rounded-lg"><i class="fa-solid fa-rotate mr-1"></i>Reîncarcă</button>
+            </div>
+            <div id="chat-messages" class="bg-[#121418] border border-gray-800 rounded-lg p-4 h-[380px] overflow-y-auto space-y-3 mb-3"></div>
+            <form onsubmit="sendChatMessage(event)" class="bg-[#121418] border border-gray-800 rounded-lg p-3">
+                <div class="flex flex-wrap gap-2 mb-2">
+                    <button type="button" onclick="toggleEmojiPicker()" class="px-3 py-2 btn-industrial rounded-lg text-sm" title="Emoji">😀</button>
+                    <label class="px-3 py-2 btn-industrial rounded-lg text-xs font-bold cursor-pointer" title="Încarcă o poză">
+                        <i class="fa-solid fa-image mr-1"></i> Poză
+                        <input id="chat-image-input" type="file" accept="image/*" class="hidden" onchange="handleChatImage(event)">
+                    </label>
+                    <span id="chat-image-name" class="text-xs text-gray-500 self-center"></span>
+                </div>
+                <div id="chat-emoji-picker" class="hidden flex flex-wrap gap-1 mb-2 p-2 bg-black/40 border border-gray-800 rounded-lg">
+                    <button type="button" onclick="insertEmoji('😀')">😀</button><button type="button" onclick="insertEmoji('😂')">😂</button>
+                    <button type="button" onclick="insertEmoji('🤣')">🤣</button><button type="button" onclick="insertEmoji('😍')">😍</button>
+                    <button type="button" onclick="insertEmoji('😎')">😎</button><button type="button" onclick="insertEmoji('🔥')">🔥</button>
+                    <button type="button" onclick="insertEmoji('❤️')">❤️</button><button type="button" onclick="insertEmoji('👍')">👍</button>
+                    <button type="button" onclick="insertEmoji('👀')">👀</button><button type="button" onclick="insertEmoji('💀')">💀</button>
+                    <button type="button" onclick="insertEmoji('🎉')">🎉</button><button type="button" onclick="insertEmoji('🙏')">🙏</button>
+                </div>
+                <div class="flex gap-2">
+                    <input id="chat-input" maxlength="500" placeholder="Scrie un mesaj..." class="flex-1 px-3 py-2 rounded-lg grunge-input text-sm">
+                    <button class="px-4 py-2 btn-industrial rounded-lg text-xs font-bold"><i class="fa-solid fa-paper-plane mr-1"></i>Trimite</button>
+                </div>
+                <div class="mt-2 text-[10px] text-gray-500">Stop META!.</div>Chat OOC.</div>
+            </form>
+        </div>
+
     </div>
 
     <!-- MODAL SIMPLU -->
@@ -731,10 +774,31 @@
         }
         async function handleRegister(e) { e.preventDefault(); const name = document.getElementById('reg-name').value.trim(); const cnp = document.getElementById('reg-cnp').value.trim(); const rank = document.getElementById('reg-rank').value; const userPass = document.getElementById('reg-user-pass').value.trim(); const gangCode = document.getElementById('reg-gang-code').value.trim(); if (gangCode !== COD_GANG_INREGISTRARE) { showModal({ title: 'Eroare', message: 'Cod acces gang incorect!', type: 'alert' }); return; } if (!name || !cnp || !userPass) return; const exista = members.find(m => m.name.toLowerCase() === name.toLowerCase()); if (exista) { showModal({ title: 'Eroare', message: 'Nume deja înregistrat!', type: 'alert' }); return; } await window.dbRef.addMember({ name: name, cnp: cnp, rank: rank, pass: userPass, actions: [] }); document.getElementById('reg-success').classList.remove('hidden'); setTimeout(() => { switchAuthMode('login'); document.getElementById('login-name').value = name; document.getElementById('reg-success').classList.add('hidden'); }, 1500); }
         function handleLogin(e) { e.preventDefault(); const name = document.getElementById('login-name').value.trim(); const pass = document.getElementById('login-pass').value.trim(); const errorEl = document.getElementById('login-error'); errorEl.classList.add('hidden'); const foundMember = members.find(m => m.name.toLowerCase() === name.toLowerCase()); if (!foundMember) { errorEl.innerText = "Nume negăsit! Înregistrează-te."; errorEl.classList.remove('hidden'); return; } if (foundMember.pass && foundMember.pass !== pass) { errorEl.innerText = "Cod incorect!"; errorEl.classList.remove('hidden'); return; } currentUser = { name: foundMember.name, role: foundMember.rank, isElJefe: (foundMember.rank === 'El Jefe' || !!foundMember.isManager), isCustomManager: !!foundMember.isManager }; window.appState.setCurrentUser(currentUser); document.getElementById('login-screen').classList.add('hidden'); document.getElementById('dashboard-screen').classList.remove('hidden'); updateBadge(); renderMembers(); renderLeaderboard(); }
+        function openChangePasswordModal() {
+            const m = members.find(item => item.name === currentUser.name);
+            if (!m) return;
+            showModal({
+                title: 'Schimbă codul personal',
+                type: 'prompt',
+                inputs: [
+                    { id: 'old', label: 'Cod actual', type: 'password' },
+                    { id: 'new', label: 'Cod nou', type: 'password' },
+                    { id: 'confirm', label: 'Repetă codul nou', type: 'password' }
+                ],
+                onConfirm: async (v) => {
+                    if (v.old !== (m.pass || '')) { showModal({ title: 'Eroare', message: 'Codul actual este incorect!', type: 'alert' }); return; }
+                    if (!v.new || v.new.length < 4) { showModal({ title: 'Eroare', message: 'Codul nou trebuie să aibă cel puțin 4 caractere.', type: 'alert' }); return; }
+                    if (v.new !== v.confirm) { showModal({ title: 'Eroare', message: 'Codurile noi nu coincid.', type: 'alert' }); return; }
+                    await window.dbRef.updateMember(m.id, { pass: v.new });
+                    showModal({ title: 'Succes', message: 'Codul a fost schimbat.', type: 'alert' });
+                }
+            });
+        }
+
         function logout() { localStorage.removeItem('saints_current_user_v5'); document.getElementById('dashboard-screen').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); document.getElementById('login-pass').value = ''; window.appState.setCurrentUser({ name: "", role: "", isElJefe: false, isCustomManager: false }); }
 
         function switchTab(tab) {
-            ['members', 'leaderboard', 'orders', 'weapons', 'drugs'].forEach(t => {
+            ['members', 'leaderboard', 'orders', 'weapons', 'drugs', 'chat'].forEach(t => {
                 document.getElementById(`section-${t}`).classList.add('hidden');
                 document.getElementById(`btn-tab-${t}`).classList.replace('bg-[#2b3036]', 'text-gray-400');
             });
@@ -742,6 +806,7 @@
             document.getElementById(`btn-tab-${tab}`).classList.replace('text-gray-400', 'bg-[#2b3036]');
             if (tab === 'leaderboard') renderLeaderboard();
             if (tab === 'orders') renderOrders();
+            if (tab === 'chat') renderChat();
         }
 
         function getTotalActions(member) { if (!member.actions) return 0; return member.actions.reduce((sum, a) => sum + a.count, 0); }
@@ -757,11 +822,17 @@
             members.forEach(m => { 
                 const total = getTotalActions(m); 
                 let actionsHTML = m.actions?.map(a => `<span class="bg-black/50 px-2 py-1 rounded text-[10px] border border-amber-900/40 text-amber-500">${a.actionName}: <span class="text-white">${a.count}</span></span>`).join(' ') || '-'; 
-                let btns = canManage ? ` 
-                    <button onclick="logAction('${m.id}')" class="px-2 py-1 bg-green-950/60 border border-green-800 text-green-400 hover:bg-green-900 rounded text-xs mr-1" title="Adaugă acțiune"><i class="fa-solid fa-plus"></i></button> 
-                    <button onclick="reduceAction('${m.id}')" class="px-2 py-1 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-xs mr-1" title="Scade acțiune"><i class="fa-solid fa-minus"></i></button> 
-                    <button onclick="changeRank('${m.id}')" class="px-2 py-1 bg-blue-950/60 border border-blue-800 text-blue-400 hover:bg-blue-900 rounded text-xs mr-1" title="Schimbă Grad"><i class="fa-solid fa-user-tag"></i></button> 
-                    <button onclick="deleteMember('${m.id}')" class="px-2 py-1 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-xs" title="Șterge membru"><i class="fa-solid fa-trash"></i></button> 
+                let btns = canManage ? `
+                    <div class="flex flex-col gap-1.5 min-w-[170px]">
+                        <div class="grid grid-cols-2 gap-1">
+                            <button onclick="logAction('${m.id}')" class="px-2 py-1.5 bg-green-950/60 border border-green-800 text-green-400 hover:bg-green-900 rounded text-[11px] font-bold"><i class="fa-solid fa-plus mr-1"></i>Adaugă</button>
+                            <button onclick="reduceAction('${m.id}')" class="px-2 py-1.5 bg-amber-950/60 border border-amber-800 text-amber-400 hover:bg-amber-900 rounded text-[11px] font-bold"><i class="fa-solid fa-minus mr-1"></i>Scade</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1">
+                            <button onclick="changeRank('${m.id}')" class="px-2 py-1.5 bg-blue-950/60 border border-blue-800 text-blue-400 hover:bg-blue-900 rounded text-[11px] font-bold"><i class="fa-solid fa-user-tag mr-1"></i>Grad</button>
+                            <button onclick="deleteMember('${m.id}')" class="px-2 py-1.5 bg-red-950/60 border border-red-800 text-red-400 hover:bg-red-900 rounded text-[11px] font-bold"><i class="fa-solid fa-trash mr-1"></i>Șterge</button>
+                        </div>
+                    </div>
                 ` : `<span class="text-xs text-gray-600">Vizualizare</span>`; 
                 tbody.innerHTML += ` <tr class="hover:bg-white/5 border-t border-gray-800/50"> <td class="py-3 px-4 font-semibold">${m.name} <div class="text-[10px] text-gray-500">ID: ${m.cnp} ${m.isManager ? '[MANAGER]' : ''}</div></td> <td class="py-3 px-4 text-xs text-amber-500 font-bold">${m.rank}</td> <td class="py-3 px-4">${actionsHTML}</td> <td class="py-3 px-4 text-center font-bold text-amber-400">${total}</td> <td class="py-3 px-4 text-right">${btns}</td> </tr> `; 
             }); 
@@ -917,8 +988,70 @@
             });
         }
 
-        function logAction(id) { const m = members.find(item => item.id == id); showModal({ title: `Adaugă activitate (${m.name})`, type: 'prompt', inputs: [{ id: 'numeA', label: 'Tip acțiune' }, { id: 'nrA', label: 'Cantitate', type: 'number', value: 1 }], onConfirm: async (vals) => { let actionsArr = m.actions || []; let existing = actionsArr.find(a => a.actionName.toLowerCase() === vals.numeA.toLowerCase()); if (existing) existing.count += parseInt(vals.nrA); else actionsArr.push({ actionName: vals.numeA, count: parseInt(vals.nrA) }); await window.dbRef.updateMember(id, { actions: actionsArr }); } }); }
-        function reduceAction(id) { const m = members.find(item => item.id == id); if (!m.actions || m.actions.length === 0) { showModal({ title: 'Atenție', message: 'Nicio activitate de scăzut.', type: 'alert' }); return; } showModal({ title: `Scade activitate (${m.name})`, type: 'prompt', inputs: [ { id: 'numeA', label: 'Nume acțiune' }, { id: 'nrA', label: 'Scade', type: 'number', value: 1 } ], onConfirm: async (vals) => { let actionsArr = m.actions || []; let existing = actionsArr.find(a => a.actionName.toLowerCase() === vals.numeA.toLowerCase()); if (existing) { existing.count -= parseInt(vals.nrA); if (existing.count <= 0) { actionsArr = actionsArr.filter(a => a.actionName.toLowerCase() !== vals.numeA.toLowerCase()); } await window.dbRef.updateMember(id, { actions: actionsArr }); } else { showModal({ title: 'Eroare', message: 'Acțiunea nu a fost găsită!', type: 'alert' }); } } }); }
+        const ACTIVITY_OPTIONS = ['Patrula', 'Raize', 'Minereada', 'Livrat', 'Frunze', 'Procesat', 'Vama', 'Jaf', 'Asteptare razie', 'Plimbare Lowrider', 'Altele'];
+
+        function activityInput() {
+            return [
+                { id: 'numeA', label: 'Activitate', type: 'select', options: ACTIVITY_OPTIONS },
+                { id: 'customA', label: 'Scrie activitatea (pentru „Altele”)' },
+                { id: 'nrA', label: 'Număr / Cantitate', type: 'number', value: 1 }
+            ];
+        }
+
+        function resolveActivityName(vals) {
+            return vals.numeA === 'Altele' ? (vals.customA || '').trim() : vals.numeA;
+        }
+
+        function logAction(id) {
+            const m = members.find(item => item.id == id);
+            showModal({
+                title: `Adaugă activitate (${m.name})`,
+                type: 'prompt',
+                inputs: activityInput(),
+                onConfirm: async (vals) => {
+                    const actionName = resolveActivityName(vals);
+                    const count = parseInt(vals.nrA, 10);
+                    if (!actionName || !Number.isFinite(count) || count < 1) return;
+                    let actionsArr = m.actions || [];
+                    let existing = actionsArr.find(a => a.actionName.toLowerCase() === actionName.toLowerCase());
+                    if (existing) existing.count += count;
+                    else actionsArr.push({ actionName, count });
+                    await window.dbRef.updateMember(id, { actions: actionsArr });
+                }
+            });
+        }
+
+        function reduceAction(id) {
+            const m = members.find(item => item.id == id);
+            if (!m.actions || m.actions.length === 0) {
+                showModal({ title: 'Atenție', message: 'Nicio activitate de scăzut.', type: 'alert' });
+                return;
+            }
+            const options = [...ACTIVITY_OPTIONS.filter(x => x !== 'Altele'), ...m.actions.map(a => a.actionName).filter(x => !ACTIVITY_OPTIONS.includes(x)), 'Altele'];
+            showModal({
+                title: `Scade activitate (${m.name})`,
+                type: 'prompt',
+                inputs: [
+                    { id: 'numeA', label: 'Activitate', type: 'select', options },
+                    { id: 'customA', label: 'Scrie activitatea (pentru „Altele”)' },
+                    { id: 'nrA', label: 'Scade', type: 'number', value: 1 }
+                ],
+                onConfirm: async (vals) => {
+                    const actionName = resolveActivityName(vals);
+                    const count = parseInt(vals.nrA, 10);
+                    let actionsArr = m.actions || [];
+                    let existing = actionsArr.find(a => a.actionName.toLowerCase() === actionName.toLowerCase());
+                    if (!existing) {
+                        showModal({ title: 'Eroare', message: 'Acțiunea nu a fost găsită!', type: 'alert' });
+                        return;
+                    }
+                    if (!Number.isFinite(count) || count < 1) return;
+                    existing.count -= count;
+                    if (existing.count <= 0) actionsArr = actionsArr.filter(a => a !== existing);
+                    await window.dbRef.updateMember(id, { actions: actionsArr });
+                }
+            });
+        }
         function deleteMember(id) { showModal({ title: 'Confirmare', message: 'Ștergi membrul?', type: 'confirm', onConfirm: () => window.dbRef.deleteMemberDoc(id) }); }
         function openAddModal() { showModal({ title: 'Membru Nou', type: 'prompt', inputs: [ { id: 'n', label: 'Nume IC' }, { id: 'c', label: 'CNP' }, { id: 'r', label: 'Grad', type: 'select', options: ['Associate', 'Dealer', 'Prospect', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] }, { id: 'p', label: 'Cod', value: '1122' } ], onConfirm: async (v) => await window.dbRef.addMember({ name: v.n, cnp: v.c, rank: v.r, pass: v.p, actions: [] }) }); }
         function resetWeeklyData() { showModal({ title: 'Reset Săptămânal', message: 'Resetat toate acțiunile la zero?', type: 'confirm', onConfirm: async () => { for (let m of members) await window.dbRef.updateMember(m.id, { actions: [] }); } }); }
@@ -995,6 +1128,104 @@
                 mineBtn.classList.toggle('text-gray-400', ordersView !== 'mine');
             }
             renderOrders();
+        }
+
+        let pendingChatImage = null;
+
+        function toggleEmojiPicker() {
+            document.getElementById('chat-emoji-picker')?.classList.toggle('hidden');
+        }
+
+        function insertEmoji(emoji) {
+            const input = document.getElementById('chat-input');
+            if (!input) return;
+            input.value += emoji;
+            input.focus();
+        }
+
+        function handleChatImage(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { e.target.value = ''; return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const max = 900;
+                    const scale = Math.min(1, max / Math.max(img.width, img.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    pendingChatImage = canvas.toDataURL('image/jpeg', 0.72);
+                    const name = document.getElementById('chat-image-name');
+                    if (name) name.textContent = '✓ ' + file.name;
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function sendChatMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text && !pendingChatImage) return;
+            chatMessages.push({
+                id: 'c_' + Date.now() + Math.random().toString(36).slice(2,6),
+                author: currentUser.name,
+                role: currentUser.role,
+                text: text,
+                image: pendingChatImage,
+                createdAt: new Date().toISOString()
+            });
+            if (chatMessages.length > 200) chatMessages = chatMessages.slice(-200);
+            input.value = '';
+            pendingChatImage = null;
+            const fileInput = document.getElementById('chat-image-input');
+            if (fileInput) fileInput.value = '';
+            const imageName = document.getElementById('chat-image-name');
+            if (imageName) imageName.textContent = '';
+            document.getElementById('chat-emoji-picker')?.classList.add('hidden');
+            await saveData();
+            renderChat();
+        }
+
+        async function deleteChatMessage(id) {
+            const msg = chatMessages.find(m => m.id === id);
+            if (!msg) return;
+            const canDelete = msg.author === currentUser.name || currentUser.isElJefe || currentUser.isCustomManager;
+            if (!canDelete) return;
+            chatMessages = chatMessages.filter(m => m.id !== id);
+            await saveData();
+            renderChat();
+        }
+
+        function renderChat() {
+            const box = document.getElementById('chat-messages');
+            if (!box) return;
+            if (!chatMessages.length) {
+                box.innerHTML = '<div class="text-center text-gray-600 text-sm py-12">Niciun mesaj încă. Pornește conversația.</div>';
+                return;
+            }
+            box.innerHTML = chatMessages.map(msg => {
+                const own = msg.author === currentUser.name;
+                const safeAuthor = String(msg.author || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const safeRole = String(msg.role || '').replace(/[&<>"']/g, '');
+                const safeText = String(msg.text || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const date = msg.createdAt ? new Date(msg.createdAt).toLocaleString('ro-RO', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+                const canDelete = own || currentUser.isElJefe || currentUser.isCustomManager;
+                const imageHtml = msg.image ? `<img src="${msg.image}" class="mt-2 max-w-full max-h-72 rounded-lg border border-gray-700 cursor-pointer" onclick="window.open(this.src,'_blank')" alt="Imagine trimisă">` : '';
+                return `<div class="flex ${own ? 'justify-end' : 'justify-start'}">
+                    <div class="max-w-[82%] ${own ? 'bg-purple-950/60 border-purple-800' : 'bg-black/40 border-gray-800'} border rounded-lg px-3 py-2">
+                        <div class="text-[10px] text-gray-500 mb-1">${safeAuthor} <span class="text-gray-700">[${safeRole}] · ${date}</span></div>
+                        ${safeText ? `<div class="text-sm text-gray-200 whitespace-pre-wrap break-words">${safeText}</div>` : ''}
+                        ${imageHtml}
+                        ${canDelete ? `<button type="button" onclick="deleteChatMessage('${msg.id}')" class="mt-2 text-[10px] text-red-400 hover:text-red-300"><i class="fa-solid fa-trash mr-1"></i>Șterge</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+            box.scrollTop = box.scrollHeight;
         }
 
         function renderOrders() {
