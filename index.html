@@ -271,6 +271,7 @@
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Grad Gang</label>
                     <select id="reg-rank" class="w-full px-3 py-2 rounded-lg grunge-input text-sm cursor-pointer">
                         <option value="Associate">Associate</option>
+						<option value="Associate">Prospect</option>
                         <option value="Dealer">Dealer</option>
                         <option value="Veteran">Veteran</option>
                         <option value="Matroană">Matroană</option>
@@ -778,7 +779,7 @@
                         label: 'Alege noul grad', 
                         type: 'select', 
                         value: m.rank,
-                        options: ['Associate', 'Dealer', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] 
+                        options: ['Associate', 'Dealer', 'Prospect', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] 
                     }
                 ],
                 onConfirm: async (v) => {
@@ -919,7 +920,7 @@
         function logAction(id) { const m = members.find(item => item.id == id); showModal({ title: `Adaugă activitate (${m.name})`, type: 'prompt', inputs: [{ id: 'numeA', label: 'Tip acțiune' }, { id: 'nrA', label: 'Cantitate', type: 'number', value: 1 }], onConfirm: async (vals) => { let actionsArr = m.actions || []; let existing = actionsArr.find(a => a.actionName.toLowerCase() === vals.numeA.toLowerCase()); if (existing) existing.count += parseInt(vals.nrA); else actionsArr.push({ actionName: vals.numeA, count: parseInt(vals.nrA) }); await window.dbRef.updateMember(id, { actions: actionsArr }); } }); }
         function reduceAction(id) { const m = members.find(item => item.id == id); if (!m.actions || m.actions.length === 0) { showModal({ title: 'Atenție', message: 'Nicio activitate de scăzut.', type: 'alert' }); return; } showModal({ title: `Scade activitate (${m.name})`, type: 'prompt', inputs: [ { id: 'numeA', label: 'Nume acțiune' }, { id: 'nrA', label: 'Scade', type: 'number', value: 1 } ], onConfirm: async (vals) => { let actionsArr = m.actions || []; let existing = actionsArr.find(a => a.actionName.toLowerCase() === vals.numeA.toLowerCase()); if (existing) { existing.count -= parseInt(vals.nrA); if (existing.count <= 0) { actionsArr = actionsArr.filter(a => a.actionName.toLowerCase() !== vals.numeA.toLowerCase()); } await window.dbRef.updateMember(id, { actions: actionsArr }); } else { showModal({ title: 'Eroare', message: 'Acțiunea nu a fost găsită!', type: 'alert' }); } } }); }
         function deleteMember(id) { showModal({ title: 'Confirmare', message: 'Ștergi membrul?', type: 'confirm', onConfirm: () => window.dbRef.deleteMemberDoc(id) }); }
-        function openAddModal() { showModal({ title: 'Membru Nou', type: 'prompt', inputs: [ { id: 'n', label: 'Nume IC' }, { id: 'c', label: 'CNP' }, { id: 'r', label: 'Grad', type: 'select', options: ['Associate', 'Dealer', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] }, { id: 'p', label: 'Cod', value: '1122' } ], onConfirm: async (v) => await window.dbRef.addMember({ name: v.n, cnp: v.c, rank: v.r, pass: v.p, actions: [] }) }); }
+        function openAddModal() { showModal({ title: 'Membru Nou', type: 'prompt', inputs: [ { id: 'n', label: 'Nume IC' }, { id: 'c', label: 'CNP' }, { id: 'r', label: 'Grad', type: 'select', options: ['Associate', 'Dealer', 'Prospect', 'Veteran', 'Matroană', 'Consilier OG', 'Right Hand', 'El Jefe'] }, { id: 'p', label: 'Cod', value: '1122' } ], onConfirm: async (v) => await window.dbRef.addMember({ name: v.n, cnp: v.c, rank: v.r, pass: v.p, actions: [] }) }); }
         function resetWeeklyData() { showModal({ title: 'Reset Săptămânal', message: 'Resetat toate acțiunile la zero?', type: 'confirm', onConfirm: async () => { for (let m of members) await window.dbRef.updateMember(m.id, { actions: [] }); } }); }
         function openManagerModal() { showModal({ title: 'Setează Manager', type: 'prompt', inputs: [{ id: 'c', label: 'CNP Membru' }], onConfirm: async (v) => { const m = members.find(x => x.cnp === v.c); if(m) await window.dbRef.updateMember(m.id, { isManager: true }); } }); }
         
